@@ -20,6 +20,7 @@ from .recognize import RecognitionError, read_image
 from .render import render_route
 
 ERROR_MESSAGES = {
+    'INVALID_REGION': '解析範囲が小さすぎるか、画像の外にはみ出しています。全50アイコンと接続線を含む範囲を指定してください。',
     'INPUT_READ_ERROR': '画像を読み込めません。ファイルが存在し、対応する画像形式か確認してください。',
     'BOARD_NOT_FOUND': '盤面を検出できません。5列・全10段階のアイコンと接続線が残る画像を指定してください。強く縮小された画像は元の画質で撮影し直してください。',
     'MULTIPLE_BOARDS': '盤面ウィンドウが複数あります。対象を1つにして撮影してください。',
@@ -52,17 +53,17 @@ def describe_result(result, page=0):
     return '解析できませんでした', '\n\n'.join(messages), False
 
 
-def analyze_file(source, output_root, limit=20):
+def analyze_file(source, output_root, limit=20, region=None):
     """Run analysis into a newly allocated folder; no earlier result is overwritten."""
     source, output_root = Path(source), Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     prefix = datetime.now().strftime('%Y%m%d_%H%M%S_')
     destination = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
-    result = run_image(source, destination, limit=limit)
+    result = run_image(source, destination, limit=limit, region=region)
     name = 'error.png' if result['status'] == 'error' else ('board.png' if result['status'] == 'ok' else 'route.png')
     preview = destination / name
     if not preview.is_file():
-        preview = source  # e.g. the window could not be located: show the input.
+        preview = destination/'input.png' if (destination/'input.png').is_file() else source
     try:
         image = read_image(preview)
     except RecognitionError:
@@ -82,6 +83,10 @@ class Application:
         self.busy = False
         self.closed = False
         self.messages = queue.Queue()
+        self.input_image = None
+        self.region = None
+        self.showing_input = False
+        self.drag_start = None
         self.image = None
         self.photo = None
         self.zoom = None  # None = fit to canvas
@@ -134,6 +139,9 @@ class Application:
         horizontal.grid(row=1,column=0,sticky='ew')
         self.canvas.configure(yscrollcommand=vertical.set,xscrollcommand=horizontal.set)
         self.canvas.bind('<Configure>',self.schedule_render)
+        self.canvas.bind('<ButtonPress-1>',self.selection_start)
+        self.canvas.bind('<B1-Motion>',self.selection_drag)
+        self.canvas.bind('<ButtonRelease-1>',self.selection_end)
         toolbar = ttk.Frame(preview_frame)
         toolbar.grid(row=2,column=0,sticky='w',pady=(8,0))
         ttk.Button(toolbar,text='全体表示',command=self.fit).pack(side='left')
@@ -149,6 +157,17 @@ class Application:
         ttk.Label(self.pages,textvariable=self.page_text).pack(side='left',padx=12)
         self.next_button = ttk.Button(self.pages,text='次へ →',command=lambda:self.change_page(1),state='disabled')
         self.next_button.pack(side='left')
+        source_tools=ttk.Frame(preview_frame)
+        source_tools.grid(row=4,column=0,sticky='ew',pady=(10,0))
+        ttk.Button(source_tools,text='入力画像',command=self.show_input).pack(side='left')
+        ttk.Button(source_tools,text='解析結果',command=self.show_result).pack(side='left',padx=5)
+        self.selecting=tk.BooleanVar(value=False)
+        self.select_button=ttk.Checkbutton(source_tools,text='範囲指定',variable=self.selecting,command=self.begin_selection)
+        self.select_button.pack(side='left')
+        self.reset_region_button=ttk.Button(source_tools,text='範囲解除',command=self.clear_region)
+        self.reset_region_button.pack(side='left',padx=5)
+        self.region_text=tk.StringVar(value='自動検出（画像全体）')
+        ttk.Label(preview_frame,textvariable=self.region_text).grid(row=5,column=0,sticky='w',pady=(4,0))
         sidebar = ttk.Frame(body,width=310)
         sidebar.grid(row=0,column=1,sticky='nsew')
         sidebar.grid_propagate(False)
@@ -181,12 +200,15 @@ class Application:
         self.details.configure(state='disabled')
 
     def clear_result(self):
+        self.drag_start = None
         self.result = self.board = None
         self.page = 0
         self.page_text.set('')
         self.previous_button.configure(state='disabled')
         self.next_button.configure(state='disabled')
         self.image = self.photo = None
+        self.showing_input = False
+        self.canvas.configure(cursor='')
         self.zoom = None
         self.destination = None
         self.open_button.configure(state='disabled')
@@ -196,9 +218,20 @@ class Application:
     def path_changed(self,*_):
         if self.busy:
             return
+        self.input_image=None
+        self.region=None
+        self.selecting.set(False)
+        self.region_text.set('自動検出（画像全体）')
         self.clear_result()
+        value=self.path.get().strip().strip('"').strip("'")
+        try:
+            if value and Path(value).expanduser().is_file():
+                self.input_image=read_image(Path(value).expanduser())
+                self.show_input()
+        except RecognitionError:
+            pass
         self.status.configure(text='解析の準備ができました' if self.path.get().strip() else '画像を指定してください',foreground='#26374a')
-        self.set_details('「解析」を押してください。')
+        self.set_details('入力画像を確認してください。必要なら「範囲指定」をオンにして盤面をドラッグで囲み、「解析」を押してください。')
 
     def browse(self):
         selected = filedialog.askopenfilename(parent=self.root,title='解析する画像を選択',
@@ -226,7 +259,8 @@ class Application:
         from .clipboard import save_clipboard_image
         path=save_clipboard_image(image,self.output_root)
         self.path.set(str(path))
-        self.image=read_image(path)
+        self.input_image=read_image(path)
+        self.show_input()
         self.status.configure(text='クリップボード画像を読み込みました',foreground='#26374a')
         self.set_details('画像を確認し、「解析」を押してください。貼り付け画像は保存先のclipboardフォルダーにPNGで保存します。')
         self.render()
@@ -259,7 +293,11 @@ class Application:
         if not value or not source.is_file():
             self.show_error('存在する画像ファイルを指定してください。フォルダーは指定できません。')
             return
+        region=self.region
         self.clear_result()
+        self.selecting.set(False)
+        self.canvas.configure(cursor='')
+        self.show_input()
         self.page_limit = limit
         self.requested_page = selected_page
         self.busy = True
@@ -267,15 +305,17 @@ class Application:
         self.browse_button.configure(state='disabled')
         self.paste_button.configure(state='disabled')
         self.analyze_button.configure(state='disabled')
+        self.select_button.configure(state='disabled')
+        self.reset_region_button.configure(state='disabled')
         self.status.configure(text='解析中…',foreground='#26374a')
         self.set_details('盤面と接続を確認しています。')
         self.progress.pack(fill='x',pady=(0,10),before=self.body)
         self.progress.start(12)
-        threading.Thread(target=self.worker,args=(source.resolve(),limit),daemon=True).start()
+        threading.Thread(target=self.worker,args=(source.resolve(),limit,region),daemon=True).start()
 
-    def worker(self,source,limit):
+    def worker(self,source,limit,region):
         try:
-            self.messages.put(('done',analyze_file(source,self.output_root,limit)))
+            self.messages.put(('done',analyze_file(source,self.output_root,limit,region)))
         except Exception as exc:
             self.messages.put(('failed',str(exc)))
 
@@ -293,13 +333,15 @@ class Application:
             self.busy = False
             self.progress.stop()
             self.progress.pack_forget()
-            for widget in (self.entry,self.browse_button,self.paste_button,self.analyze_button):
+            for widget in (self.entry,self.browse_button,self.paste_button,self.analyze_button,self.select_button,self.reset_region_button):
                 widget.configure(state='normal')
             if kind == 'failed':
                 self.show_error('解析処理を完了できませんでした。\n\n'+payload)
             else:
                 result,self.destination,self.image = payload
                 self.result = result
+                self.result_image = self.image
+                self.showing_input = False
                 title,details,success = describe_result(result)
                 self.status.configure(text=title,foreground='#147447' if success else '#b42318')
                 self.set_details(details)
@@ -318,6 +360,7 @@ class Application:
         self.page = page
         paths = self.result['paths']
         path = [(r-1,c-1) for r,c in paths[page]]
+        self.showing_input = False
         self.image = render_route(self.board,path)
         _,details,_ = describe_result(self.result,page)
         self.set_details(details)
@@ -338,6 +381,89 @@ class Application:
             # Fetch additional optimal paths only when needed; retain the exact total.
             self.start(limit=self.page_limit*2,selected_page=page)
 
+    def show_input(self):
+        if self.input_image is None:
+            return
+        self.showing_input=True
+        self.image=self.input_image
+        self.canvas.configure(cursor='crosshair' if self.selecting.get() and not self.busy else '')
+        self.zoom=None
+        self.render()
+
+    def show_result(self):
+        if self.result is None:
+            return
+        self.selecting.set(False)
+        self.drag_start=None
+        self.canvas.configure(cursor='')
+        self.showing_input=False
+        self.zoom=None
+        if self.result['status']=='ok':
+            self.show_page(self.page)
+        else:
+            self.image=self.result_image
+            self.render()
+
+    def begin_selection(self):
+        if self.busy:
+            return
+        self.show_input()
+        self.canvas.configure(cursor='crosshair' if self.selecting.get() else '')
+
+    def clear_region(self):
+        if self.busy:
+            return
+        self.region=None
+        self.clear_result()
+        self.region_text.set('自動検出（画像全体）')
+        self.status.configure(text='解析の準備ができました',foreground='#26374a')
+        self.show_input()
+
+    def input_point(self,event):
+        x=(self.canvas.canvasx(event.x)-self.image_offset[0])/self.display_scale
+        y=(self.canvas.canvasy(event.y)-self.image_offset[1])/self.display_scale
+        h,w=self.input_image.shape[:2]
+        return max(0,min(w,x)),max(0,min(h,y))
+
+    def selection_start(self,event):
+        if self.busy or not self.selecting.get() or not self.showing_input or self.input_image is None:
+            return
+        self.drag_start=self.input_point(event)
+
+    def selection_drag(self,event):
+        if self.drag_start is not None and not self.busy:
+            self.draw_region((*self.drag_start,*self.input_point(event)))
+
+    def selection_end(self,event):
+        if self.drag_start is None or self.busy:
+            return
+        import math
+        a,b=self.drag_start,self.input_point(event)
+        self.drag_start=None
+        box=(math.floor(min(a[0],b[0])),math.floor(min(a[1],b[1])),
+             math.ceil(max(a[0],b[0])),math.ceil(max(a[1],b[1])))
+        if box[2]-box[0]<20 or box[3]-box[1]<20:
+            self.set_details('指定範囲が小さすぎます。全50個のアイコンと接続線を含むように囲んでください。')
+            self.render()
+            return
+        self.region=box
+        self.clear_result()
+        self.show_input()
+        self.status.configure(text='解析範囲を指定しました',foreground='#26374a')
+        self.region_text.set(f'解析範囲: ({box[0]}, {box[1]}) ～ ({box[2]}, {box[3]})')
+        self.set_details('指定範囲内から盤面を検出します。全50アイコンと接続線が入っていることを確認して「解析」を押してください。')
+        self.render()
+
+    def draw_region(self,box):
+        self.canvas.delete('region')
+        if box is None or not self.showing_input:
+            return
+        x1,y1,x2,y2=box
+        sx,sy=self.image_offset
+        scale=self.display_scale
+        self.canvas.create_rectangle(sx+x1*scale,sy+y1*scale,sx+x2*scale,sy+y2*scale,
+                                     outline='#e07800',width=3,tags='region')
+
     def schedule_render(self,event=None):
         if self.resize_id is not None:
             self.root.after_cancel(self.resize_id)
@@ -354,7 +480,7 @@ class Application:
         if self.image is None:
             self.scale_text.set('')
             self.canvas.configure(scrollregion=(0,0,width,height))
-            self.canvas.create_text(width/2,height/2,text='解析結果の画像をここに表示します',fill='#65768b',width=max(100,width-40))
+            self.canvas.create_text(width/2,height/2,text='入力画像と解析結果をここに表示します',fill='#65768b',width=max(100,width-40))
             return
         ih,iw=self.image.shape[:2]
         fit=min(max(1,width-20)/iw,max(1,height-20)/ih)
@@ -367,7 +493,9 @@ class Application:
             return
         self.photo=tk.PhotoImage(master=self.root,data=base64.b64encode(png).decode('ascii'))
         dw,dh=resized.shape[1],resized.shape[0]
+        self.image_offset=((max(width,dw)-dw)/2,(max(height,dh)-dh)/2)
         self.canvas.create_image(max(width,dw)/2,max(height,dh)/2,image=self.photo)
+        self.draw_region(self.region)
         self.canvas.configure(scrollregion=(0,0,max(width,dw),max(height,dh)))
         self.scale_text.set(f'{scale:.0%}')
 

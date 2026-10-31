@@ -17,6 +17,7 @@ if '--smoke-test' in sys.argv:
     parser.add_argument('--smoke-test',type=Path,required=True)
     parser.add_argument('--report',type=Path,required=True)
     parser.add_argument('--clipboard-test',action='store_true')
+    parser.add_argument('--region-test',action='store_true')
     args=parser.parse_args()
     root=TkinterDnD.Tk()
     root.withdraw()
@@ -27,6 +28,8 @@ if '--smoke-test' in sys.argv:
             app.load_pasted_image(source)
     else:
         app.path.set(str(args.smoke_test))
+    if args.region_test:
+        app.region=(715,327,975,827)
     app.start()
     exit_code=[1]
     def finish():
@@ -36,6 +39,7 @@ if '--smoke-test' in sys.argv:
         result={'title':app.status.cget('text'),'has_preview':app.image is not None,
                 'status': app.result.get('status') if app.result else 'failed',
                 'max_count':app.result.get('max_count') if app.result else None,
+                'input_region':app.result.get('input_region') if app.result else None,
                 'tkdnd':root.tk.call('package','present','tkdnd')}
         args.report.parent.mkdir(parents=True,exist_ok=True)
         args.report.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
