@@ -39,6 +39,14 @@ class SolverTests(unittest.TestCase):
             self.assertEqual(result['optimal_path_count'], len(expected))
             self.assertEqual({tuple(map(tuple, p)) for p in result['paths']}, expected)
 
+    def test_best_start_is_not_leftmost_and_uses_top_horizontal_edges(self):
+        nodes = [(r, c) for r in range(2) for c in range(5)]
+        edges = [((0, 1), (0, 2)), ((0, 2), (0, 3)),
+                 ((0, 1), (1, 1)), ((0, 0), (1, 0))]
+        result = solve(nodes, edges)
+        self.assertEqual(result['max_count'], 4)
+        self.assertEqual(result['paths'], [[(0, 3), (0, 2), (0, 1), (1, 1)]])
+
     def test_crossing_does_not_create_turn(self):
         nodes = [(r, c) for r in range(2) for c in range(2)]
         result = solve(nodes, [((0, 0), (1, 1)), ((0, 1), (1, 0))])
