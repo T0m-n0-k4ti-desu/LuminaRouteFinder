@@ -18,6 +18,7 @@ if '--smoke-test' in sys.argv:
     parser.add_argument('--report',type=Path,required=True)
     parser.add_argument('--clipboard-test',action='store_true')
     parser.add_argument('--region-test',action='store_true')
+    parser.add_argument('--scaled-header-test',action='store_true')
     args=parser.parse_args()
     root=TkinterDnD.Tk()
     root.withdraw()
@@ -30,6 +31,11 @@ if '--smoke-test' in sys.argv:
         app.path.set(str(args.smoke_test))
     if args.region_test:
         app.region=(715,327,975,827)
+    if args.scaled_header_test:
+        # Exercise the PR fallback in a separate diagnostic process, including
+        # the GUI worker and packaged assets, even if this image has a good grid.
+        import lumina_route_finder.locate as locator
+        locator.find_grids=lambda image: []
     app.start()
     exit_code=[1]
     def finish():
@@ -46,7 +52,7 @@ if '--smoke-test' in sys.argv:
         exit_code[0]=0 if result['status']=='ok' and result['has_preview'] else 1
         app.close()
     root.after(100,finish)
-    root.after(30000,lambda:app.close() if not app.closed else None)
+    root.after(60000,lambda:app.close() if not app.closed else None)
     root.mainloop()
     sys.exit(exit_code[0])
 else:

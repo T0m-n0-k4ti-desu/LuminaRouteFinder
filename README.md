@@ -4,6 +4,8 @@ Lumina’s Corridorのスクリーンショットから、第1段階→第10段�
 
 ## Windows版ダウンロード（Python不要）
 
+v1.0を公開しています。[変更履歴](CHANGELOG.md)も参照してください。
+
 **[LuminaRouteFinder.exe をダウンロード](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases/latest/download/LuminaRouteFinder.exe)**
 
 [リリース一覧](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases) · [SHA-256チェックサム](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases/latest/download/SHA256SUMS.txt)
@@ -216,6 +218,6 @@ python -m venv .venv-build
 .\.venv-build\Scripts\python.exe tools\build_exe.py
 ```
 
-`dist/LuminaRouteFinder.exe` と `dist/SHA256SUMS.txt` を生成します。ビルド後はexe自体を起動し、GUI・TkDnD・同梱テンプレート・サンプル解析・画像表示を自動確認します。認識用アセットと必要なライブラリをexeに含め、実行時の一時展開先には結果を保存しません。
+`dist/LuminaRouteFinder.exe` と `dist/SHA256SUMS.txt` を生成します。ビルド後はexe自体を起動し、GUI・TkDnD・同梱テンプレート・全画面・切り抜き・貼り付け・範囲指定・倍率タイトルバー検出と画像表示を自動確認します。認識用アセットと必要なライブラリをexeに含め、実行時の一時展開先には結果を保存しません。
 
 配布ファイルはGitのソース履歴に入れず、GitHub Releasesの添付ファイルとして公開します。READMEのダウンロードリンクは最新リリースの `LuminaRouteFinder.exe` を参照します。
