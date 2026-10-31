@@ -19,6 +19,32 @@ class NormalizationTests(unittest.TestCase):
     def assert_same_graph(self,image,expected=None):
         self.assertEqual(set(recognize(image)[2]),self.expected if expected is None else expected)
 
+    def test_scaled_header_recovers_when_grid_detection_misses(self):
+        from unittest.mock import patch
+        scale = 1.75
+        image = cv2.resize(self.full, None, fx=scale, fy=scale)
+        with patch('lumina_route_finder.locate.find_grids', return_value=[]):
+            board, origin, edges, _, _ = recognize(image)
+        self.assertEqual(board.shape, (500, 260, 3))
+        self.assertEqual(set(edges), self.expected)
+        for actual, expected in zip(origin, (715*scale, 327*scale)):
+            self.assertAlmostEqual(actual, expected, delta=2)
+
+    def test_scaled_header_ignores_covered_window_and_rejects_two_boards(self):
+        from lumina_route_finder.recognize import locate_scaled_header
+        window = cv2.resize(self.full[237:843,633:1288], None, fx=1.25, fy=1.25)
+        h, w = window.shape[:2]
+        image = np.zeros((h+40, 2*w+80, 3), np.uint8)
+        image[20:20+h,20:20+w] = window
+        # Only the other title is visible; its covered board must not count.
+        image[20:55,w+50:w+50+w] = window[:35]
+        board, _, _, _ = locate_scaled_header(image)
+        self.assertEqual(board.shape, (500,260,3))
+        image[20:20+h,w+50:w+50+w] = window
+        with self.assertRaises(RecognitionError) as caught:
+            locate_scaled_header(image)
+        self.assertEqual(caught.exception.issues[0]['code'], 'MULTIPLE_BOARDS')
+
     def test_board_only_crop(self):
         self.assert_same_graph(self.full[327:827,715:975])
         # Tight margins around the icons; header/side labels are absent.

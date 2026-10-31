@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 ASSETS = Path(__file__).parent / 'assets'
-CONFIG_VERSION = 'visible-grid-v3'
+CONFIG_VERSION = 'scaled-header-grid-v4'
 
 
 class RecognitionError(Exception):
@@ -59,6 +59,71 @@ def locate_native(image):
     return matches[0]
 
 
+def locate_scaled_header(image):
+    """Recover a board from its scaled header when lattice detection fails."""
+    from .locate import normalize
+    template = read_image(ASSETS / 'window.png')
+    h, w = template.shape[:2]
+    reduction = min(1., 1920 / image.shape[1])
+    search = cv2.resize(image, None, fx=reduction, fy=reduction,
+                        interpolation=cv2.INTER_AREA) if reduction < 1 else image
+
+    def match(scale, source, factor):
+        width, height = round(w*scale*factor), round(h*scale*factor)
+        if width < 2 or height < 2 or width > source.shape[1] or height > source.shape[0]:
+            return None
+        resized = cv2.resize(template, (width, height), interpolation=cv2.INTER_LINEAR)
+        scores = cv2.matchTemplate(source, resized, cv2.TM_CCOEFF_NORMED)
+        _, score, _, _ = cv2.minMaxLoc(scores)
+        return score, scale, scores
+
+    coarse = [m[:2] for scale in np.arange(.5, 3.001, .05)
+              if (m := match(float(scale), search, reduction)) is not None]
+    matches = []
+    # Refine each promising scale, including separate windows at different scales.
+    # A low coarse score may recover at full resolution, so always refine the best.
+    scales = [scale for score, scale in coarse if score >= .88]
+    if coarse:
+        scales.append(max(coarse)[1])
+    refined_scales = set()
+    for coarse_scale in scales:
+        best = None
+        for step in range(max(100, round((coarse_scale-.05)*200)),
+                          min(600, round((coarse_scale+.05)*200))+1):
+            if step in refined_scales:
+                continue
+            refined_scales.add(step)
+            candidate = match(step/200, image, 1.)
+            if candidate is not None and (best is None or candidate[0] > best[0]):
+                best = candidate
+        if best is None or best[0] < .88:
+            continue
+        _, scale, scores = best
+        ih, iw = round(h*scale), round(w*scale)
+        for _ in range(12):
+            _, score, _, (x, y) = cv2.minMaxLoc(scores)
+            if score < .88:
+                break
+            scores[max(0,y-ih):y+ih, max(0,x-iw//2):x+iw//2] = -1
+            origin = (x+82*scale, y+90*scale)
+            ox, oy = origin
+            if ox+260*scale > image.shape[1] or oy+500*scale > image.shape[0]:
+                continue
+            board = normalize(image, origin, (scale, scale))
+            # Match main's handling of covered titles: require a visible board.
+            if visible_icon_count(board) < 43:
+                continue
+            if any(abs(ox-m[1][0]) < 25*scale and abs(oy-m[1][1]) < 25*scale
+                   for m in matches):
+                continue
+            matches.append((board, origin, float(score), (scale, scale)))
+    if len(matches) > 1:
+        raise RecognitionError([issue('MULTIPLE_BOARDS', 'Multiple complete scaled windows found.')])
+    if not matches:
+        raise RecognitionError([issue('BOARD_NOT_FOUND', 'Window header not found at 0.5–3x scale.')])
+    return matches[0]
+
+
 def visible_icon_count(board):
     gray=cv2.cvtColor(board,cv2.COLOR_BGR2GRAY).astype(float)
     yy,xx=np.mgrid[-22:23,-22:23]
@@ -90,7 +155,7 @@ def locate_details(image):
         if not validate(native[0]):
             return native
     if not grids:
-        raise RecognitionError([issue('BOARD_NOT_FOUND','A complete 5-column, 10-row board could not be located.')])
+        return locate_scaled_header(image)
     origin,scale,score=grids[0]
     return normalize(image,origin,scale),origin,score,scale
 
