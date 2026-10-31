@@ -162,6 +162,15 @@ class GuiTests(unittest.TestCase):
             self.app.paste_image()
         self.assertIn('クリップボードに画像がありません',self.app.details.get('1.0','end'))
 
+    def test_missing_clipboard_backend_shows_install_help(self):
+        from unittest.mock import patch
+        self.app.path.set('unchanged.jpg')
+        with patch('lumina_route_finder.clipboard.get_clipboard_image',
+                   side_effect=NotImplementedError('wl-paste or xclip is required')):
+            self.assertEqual(self.app.paste_image(), 'break')
+        self.assertEqual(self.app.path.get(), 'unchanged.jpg')
+        self.assertIn('sudo apt install wl-clipboard xclip', self.app.details.get('1.0','end'))
+
     def test_text_paste_does_not_replace_selected_image(self):
         from unittest.mock import patch
         self.app.path.set('unchanged.jpg')
@@ -222,6 +231,49 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(self.app.input_point(SimpleNamespace(x=1,y=1)),(400,200))
         with patch.object(self.app.canvas,'canvasx',return_value=-100),patch.object(self.app.canvas,'canvasy',return_value=2000):
             self.assertEqual(self.app.input_point(SimpleNamespace(x=1,y=1)),(0,500))
+
+    def test_filter_options_default_off_and_combined_analysis(self):
+        from lumina_route_finder.contents import CONTENT_NAMES
+        sample=Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'
+        self.assertFalse(self.app.avoid_repeated.get())
+        self.assertFalse(self.app.exclude_enabled.get())
+        self.assertEqual(self.app.content_list.cget('state'),'disabled')
+        self.app.path.set(str(sample))
+        self.app.avoid_repeated.set(True)
+        self.app.exclude_enabled.set(True)
+        self.app.options_changed()
+        self.app.content_list.selection_set(list(CONTENT_NAMES).index('boss_mutation'))
+        self.app.start(limit=1)
+        self.assertIn('disabled',self.app.repeat_check.state())
+        self.wait_for_analysis()
+        self.assertEqual(self.app.result['status'],'ok')
+        self.assertEqual(self.app.result['filters'],{'avoid_repeated':True,'excluded_types':['boss_mutation']})
+        self.assertIn('同じコンテンツの連続を禁止',self.app.details.get('1.0','end'))
+        self.assertIn('ボス変異戦闘',self.app.details.get('1.0','end'))
+        if self.app.result['paths_truncated']:
+            self.app.change_page(1)
+            self.wait_for_analysis()
+            self.assertEqual(self.app.page,1)
+            self.assertTrue(self.app.result['filters']['avoid_repeated'])
+            self.assertEqual(self.app.result['filters']['excluded_types'],['boss_mutation'])
+        self.app.exclude_enabled.set(False)
+        self.app.options_changed()
+        self.assertIsNone(self.app.result)
+        self.assertEqual(self.app.content_list.cget('state'),'disabled')
+        self.app.avoid_repeated.set(False)
+        self.app.options_changed()
+        self.app.start()
+        self.wait_for_analysis()
+        self.assertEqual(self.app.result['status'],'ok')
+        self.assertNotIn('filters',self.app.result)
+
+    def test_empty_exclusion_selection_requires_target(self):
+        self.app.path.set(str(Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'))
+        self.app.exclude_enabled.set(True)
+        self.app.options_changed()
+        self.app.start()
+        self.assertFalse(self.app.busy)
+        self.assertIn('1つ以上',self.app.details.get('1.0','end'))
 
     def test_unexpected_worker_error_recovers_controls(self):
         self.app.busy=True

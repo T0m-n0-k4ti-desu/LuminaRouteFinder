@@ -2,7 +2,7 @@
 from collections import defaultdict
 
 
-def solve(nodes, edges, limit=20):
+def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False):
     """Return optimal paths; horizontal travel is bidirectional, upward travel forbidden.
 
     Keep exact optimal path count, but materialize at most ``limit`` examples.
@@ -16,12 +16,21 @@ def solve(nodes, edges, limit=20):
     rows = sorted({r for r, _ in nodes})
     if rows != list(range(rows[-1] + 1)):
         raise ValueError('rows must be contiguous from zero')
+    excluded_types = set(excluded_types)
+    if excluded_types or avoid_repeated:
+        if node_types is None or any(n not in node_types for n in nodes):
+            raise ValueError('content types are required for every node when filtering')
+    blocked = {n for n in nodes if node_types is not None and node_types.get(n) in excluded_types}
     horizontal = defaultdict(set)
     down = defaultdict(set)
     for u, v in edges:
         u, v = tuple(u), tuple(v)
         if u not in nodes or v not in nodes or u == v:
             raise ValueError('invalid edge endpoint')
+        if not (u[0] == v[0] or v[0] == u[0]+1):
+            raise ValueError('edges must be horizontal or one row downward')
+        if u in blocked or v in blocked or (avoid_repeated and node_types[u] == node_types[v]):
+            continue
         if u[0] == v[0]:
             horizontal[u].add(v)
             horizontal[v].add(u)
@@ -30,7 +39,7 @@ def solve(nodes, edges, limit=20):
         else:
             raise ValueError('edges must be horizontal or one row downward')
     # state = (best length, exact count, bounded example paths)
-    states = {n: (0, 1, [[]]) for n in sorted(nodes) if n[0] == 0}
+    states = {n: (0, 1, [[]]) for n in sorted(nodes) if n[0] == 0 and n not in blocked}
     for row in rows:
         ends = {}
         def visit(path, previous):

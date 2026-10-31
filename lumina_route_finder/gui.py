@@ -18,8 +18,10 @@ from tkinterdnd2 import COPY, DND_FILES, TkinterDnD
 from .__main__ import run_image
 from .recognize import RecognitionError, read_image
 from .render import render_route
+from .contents import CONTENT_NAMES
 
 ERROR_MESSAGES = {
+    'AMBIGUOUS_CONTENT': 'コンテンツの種類を確定できません。画像の画質や遮蔽を確認するか、除外オプションをオフにしてください。',
     'INVALID_REGION': '解析範囲が小さすぎるか、画像の外にはみ出しています。全50アイコンと接続線を含む範囲を指定してください。',
     'INPUT_READ_ERROR': '画像を読み込めません。ファイルが存在し、対応する画像形式か確認してください。',
     'BOARD_NOT_FOUND': '盤面を検出できません。5列・全10段階のアイコンと接続線が残る画像を指定してください。強く縮小された画像は元の画質で撮影し直してください。',
@@ -39,10 +41,14 @@ def describe_result(result, page=0):
         total = result['optimal_path_count']
         path = result['paths'][page]
         details = f'同率の最長経路: {total}通り\n候補 {page+1}/{len(result["paths"])} を表示しています。\n\n通過順（段階・列）\n'
-        details += '\n'.join(f'{i:2}. 第{r}段階・{c}列目' for i, (r,c) in enumerate(path,1))
+        kinds = result.get('content_types')
+        details += '\n'.join(f'{i:2}. 第{r}段階・{c}列目' +
+                             (' · '+CONTENT_NAMES[kinds[r-1][c-1]] if kinds else '')
+                             for i, (r,c) in enumerate(path,1))
+        details = describe_filters(result) + details
         return f'解析完了 · 最大{count}アイコン', details, True
     if result['status'] == 'no_path':
-        return 'ゴールに到達できません', '認識した接続では第1段階から第10段階への経路がありません。接続確認画像 recognized.png も確認してください。', False
+        return 'ゴールに到達できません', describe_filters(result)+'現在の接続と探索条件では第1段階から第10段階への経路がありません。条件を緩めるか、接続確認画像 recognized.png を確認してください。', False
     messages = []
     for error in result.get('errors', []):
         code = error['code']
@@ -53,13 +59,24 @@ def describe_result(result, page=0):
     return '解析できませんでした', '\n\n'.join(messages), False
 
 
-def analyze_file(source, output_root, limit=20, region=None):
+def describe_filters(result):
+    filters = result.get('filters', {})
+    lines = []
+    if filters.get('avoid_repeated'):
+        lines.append('同じコンテンツの連続を禁止')
+    if filters.get('excluded_types'):
+        lines.append('除外: '+ '、'.join(CONTENT_NAMES[k] for k in filters['excluded_types']))
+    return '\n'.join(lines)+'\n\n' if lines else ''
+
+
+def analyze_file(source, output_root, limit=20, region=None, *, avoid_repeated=False, excluded_types=()):
     """Run analysis into a newly allocated folder; no earlier result is overwritten."""
     source, output_root = Path(source), Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     prefix = datetime.now().strftime('%Y%m%d_%H%M%S_')
     destination = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
-    result = run_image(source, destination, limit=limit, region=region)
+    result = run_image(source, destination, limit=limit, region=region,
+                       avoid_repeated=avoid_repeated, excluded_types=excluded_types)
     name = 'error.png' if result['status'] == 'error' else ('board.png' if result['status'] == 'ok' else 'route.png')
     preview = destination / name
     if not preview.is_file():
@@ -120,6 +137,25 @@ class Application:
         self.drop_label = tk.Label(main,text='画像をドロップ、またはCtrl＋Vで貼り付けできます（1枚）',
                                    bg='#eef3f8',fg='#42556b',pady=12,highlightthickness=1,highlightbackground='#b8c9da')
         self.drop_label.pack(fill='x',pady=(10,12))
+        options = ttk.LabelFrame(main, text='探索オプション（チェック時のみ有効）', padding=8)
+        options.pack(fill='x', pady=(0,10))
+        self.avoid_repeated = tk.BooleanVar(value=False)
+        self.exclude_enabled = tk.BooleanVar(value=False)
+        self.repeat_check = ttk.Checkbutton(options,text='同じコンテンツの連続を禁止',variable=self.avoid_repeated,
+                                            command=self.options_changed)
+        self.repeat_check.grid(row=0,column=0,sticky='w',padx=(0,20))
+        self.exclude_check = ttk.Checkbutton(options,text='指定コンテンツを除外',variable=self.exclude_enabled,
+                                             command=self.options_changed)
+        self.exclude_check.grid(row=0,column=1,sticky='w')
+        self.content_list = tk.Listbox(options,selectmode='multiple',exportselection=False,height=4,width=32)
+        for name in CONTENT_NAMES.values():
+            self.content_list.insert('end',name)
+        self.content_list.grid(row=1,column=1,sticky='ew',pady=(5,0))
+        scroll = ttk.Scrollbar(options,orient='vertical',command=self.content_list.yview)
+        scroll.grid(row=1,column=2,sticky='ns',pady=(5,0))
+        self.content_list.configure(yscrollcommand=scroll.set,state='disabled')
+        ttk.Label(options,text='除外する種類をクリックして選択・解除できます（複数可）。',wraplength=330).grid(row=1,column=0,sticky='w',padx=(0,20))
+        self.content_list.bind('<<ListboxSelect>>',self.options_changed)
         self.progress = ttk.Progressbar(main,mode='indeterminate')
         body = ttk.Frame(main)
         self.body = body
@@ -251,6 +287,11 @@ class Application:
                 return None
             self.load_pasted_image(image)
             return 'break'
+        except NotImplementedError as exc:
+            self.show_error('この環境ではクリップボード画像を取得できません。Linux / WSLでは、\n'
+                            'sudo apt install wl-clipboard xclip\n'
+                            'で必要なツールを導入してください。画像をファイルに保存し、参照から開くこともできます。\n\n'+str(exc))
+            return 'break'
         except (ImportError,OSError,ValueError) as exc:
             self.show_error('クリップボード画像を読み込めませんでした。コピーし直してください。\n\n'+str(exc))
             return 'break'
@@ -283,6 +324,16 @@ class Application:
         self.status.configure(text='解析できませんでした',foreground='#b42318')
         self.set_details(message)
 
+    def options_changed(self,event=None):
+        if self.busy:
+            return
+        self.content_list.configure(state='normal' if self.exclude_enabled.get() else 'disabled')
+        if self.result is not None:
+            self.clear_result()
+            self.show_input()
+            self.status.configure(text='探索条件を変更しました。「解析」を押してください。',foreground='#26374a')
+            self.set_details('現在の条件で探索するには「解析」を押してください。')
+
     def start(self, limit=20, selected_page=0):
         if self.busy:
             return
@@ -292,6 +343,11 @@ class Application:
         source = Path(value).expanduser()
         if not value or not source.is_file():
             self.show_error('存在する画像ファイルを指定してください。フォルダーは指定できません。')
+            return
+        avoid_repeated = self.avoid_repeated.get()
+        excluded_types = tuple(list(CONTENT_NAMES)[i] for i in self.content_list.curselection()) if self.exclude_enabled.get() else ()
+        if self.exclude_enabled.get() and not excluded_types:
+            self.show_error('除外するコンテンツを1つ以上選択するか、「指定コンテンツを除外」のチェックを外してください。')
             return
         region=self.region
         self.clear_result()
@@ -307,15 +363,19 @@ class Application:
         self.analyze_button.configure(state='disabled')
         self.select_button.configure(state='disabled')
         self.reset_region_button.configure(state='disabled')
+        self.repeat_check.configure(state='disabled')
+        self.exclude_check.configure(state='disabled')
+        self.content_list.configure(state='disabled')
         self.status.configure(text='解析中…',foreground='#26374a')
         self.set_details('盤面と接続を確認しています。')
         self.progress.pack(fill='x',pady=(0,10),before=self.body)
         self.progress.start(12)
-        threading.Thread(target=self.worker,args=(source.resolve(),limit,region),daemon=True).start()
+        threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types),daemon=True).start()
 
-    def worker(self,source,limit,region):
+    def worker(self,source,limit,region,avoid_repeated=False,excluded_types=()):
         try:
-            self.messages.put(('done',analyze_file(source,self.output_root,limit,region)))
+            self.messages.put(('done',analyze_file(source,self.output_root,limit,region,
+                                                           avoid_repeated=avoid_repeated,excluded_types=excluded_types)))
         except Exception as exc:
             self.messages.put(('failed',str(exc)))
 
@@ -335,6 +395,9 @@ class Application:
             self.progress.pack_forget()
             for widget in (self.entry,self.browse_button,self.paste_button,self.analyze_button,self.select_button,self.reset_region_button):
                 widget.configure(state='normal')
+            self.repeat_check.configure(state='normal')
+            self.exclude_check.configure(state='normal')
+            self.content_list.configure(state='normal' if self.exclude_enabled.get() else 'disabled')
             if kind == 'failed':
                 self.show_error('解析処理を完了できませんでした。\n\n'+payload)
             else:

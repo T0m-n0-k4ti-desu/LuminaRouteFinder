@@ -62,6 +62,39 @@ class SolverTests(unittest.TestCase):
         self.assertEqual(result['optimal_path_count'], 2)
         self.assertTrue(result['paths_truncated'])
 
+    def test_filtered_results_match_exhaustive_search(self):
+        rng = random.Random(73)
+        nodes = [(r,c) for r in range(3) for c in range(3)]
+        candidates = [(u,v) for u in nodes for v in nodes
+                      if (u[0]==v[0] and u[1]+1==v[1])
+                      or (v[0]==u[0]+1 and abs(v[1]-u[1])<=1)]
+        for _ in range(50):
+            edges = [e for e in candidates if rng.random()<.5]
+            types = {n:rng.choice(['a','b','c']) for n in nodes}
+            for repeat,excluded in [(False,()),(True,()),(False,('a',)),(True,('a',))]:
+                allowed = [n for n in nodes if types[n] not in excluded]
+                valid = [(u,v) for u,v in edges if u in allowed and v in allowed
+                         and (not repeat or types[u]!=types[v])]
+                # Preserve the original start/goal rows even when an entire row is excluded.
+                if not any(r==0 for r,c in allowed) or not any(r==2 for r,c in allowed):
+                    best,expected = 0,set()
+                else:
+                    best,expected = brute(allowed,valid)
+                result = solve(nodes,edges,limit=10000,node_types=types,
+                               excluded_types=excluded,avoid_repeated=repeat)
+                self.assertEqual(result['max_count'] or 0,best)
+                self.assertEqual(result['optimal_path_count'],len(expected))
+                self.assertEqual({tuple(map(tuple,p)) for p in result['paths']},expected)
+
+    def test_filtering_requires_labels_and_can_block_entire_start_or_goal(self):
+        nodes = [(0,0),(1,0)]
+        edges = [(nodes[0],nodes[1])]
+        with self.assertRaises(ValueError):
+            solve(nodes,edges,avoid_repeated=True)
+        for blocked in nodes:
+            types = {n:('blocked' if n==blocked else 'ok') for n in nodes}
+            self.assertEqual(solve(nodes,edges,node_types=types,excluded_types=['blocked'])['status'],'no_path')
+
     def test_upward_rejected(self):
         with self.assertRaises(ValueError):
             solve([(0, 0), (1, 0)], [((1, 0), (0, 0))])
