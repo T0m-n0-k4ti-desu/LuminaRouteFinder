@@ -23,6 +23,7 @@ if '--smoke-test' in sys.argv:
     root=TkinterDnD.Tk()
     root.withdraw()
     app=Application(root,args.report.parent/'analysis')
+    app.delete_outputs.set(True)
     if args.clipboard_test:
         from PIL import Image
         with Image.open(args.smoke_test) as source:
@@ -46,6 +47,9 @@ if '--smoke-test' in sys.argv:
                 'status': app.result.get('status') if app.result else 'failed',
                 'max_count':app.result.get('max_count') if app.result else None,
                 'input_region':app.result.get('input_region') if app.result else None,
+                'generated_output':str(app.destination) if app.destination else None,
+                'input':app.result.get('input') if app.result else None,
+                'cleanup_enabled':app.delete_outputs.get(),
                 'tkdnd':root.tk.call('package','present','tkdnd')}
         args.report.parent.mkdir(parents=True,exist_ok=True)
         args.report.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

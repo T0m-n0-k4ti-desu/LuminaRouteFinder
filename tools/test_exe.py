@@ -37,6 +37,10 @@ def test_executable():
         result=json.loads(report.read_text(encoding='utf-8'))
         if result['status']!='ok' or result['max_count']!=expected or not result['has_preview']:
             raise RuntimeError(f'Unexpected frozen GUI result: {result}')
+        if not result['cleanup_enabled'] or Path(result['generated_output']).exists():
+            raise RuntimeError('Frozen GUI did not clean its generated output on exit')
+        if name=='clipboard' and Path(result['input']).exists():
+            raise RuntimeError('Frozen GUI did not clean its clipboard input on exit')
         if name=='region' and result['input_region'] != [715,327,975,827]:
             raise RuntimeError('Frozen GUI did not use the selected region')
         print(f'Frozen GUI: {name}, TkDnD and preview verified ({expected} icons).',flush=True)

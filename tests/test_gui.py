@@ -223,6 +223,47 @@ class GuiTests(unittest.TestCase):
         with patch.object(self.app.canvas,'canvasx',return_value=-100),patch.object(self.app.canvas,'canvasy',return_value=2000):
             self.assertEqual(self.app.input_point(SimpleNamespace(x=1,y=1)),(0,500))
 
+    def test_cleanup_checkbox_default_and_disable_persists(self):
+        from lumina_route_finder.session import load_cleanup_setting
+        self.assertTrue(self.app.delete_outputs.get())
+        self.app.delete_outputs.set(False)
+        self.app.save_settings()
+        self.assertFalse(load_cleanup_setting(self.app.settings_path))
+        directory=self.app.output_root/'current'
+        directory.mkdir()
+        (directory/'route.png').write_bytes(b'keep')
+        self.app.session_outputs.add_directory(directory)
+        self.app.close()
+        self.assertTrue((directory/'route.png').exists())
+
+    def test_close_waits_for_worker_and_cleans_even_unpolled_results(self):
+        import threading
+        from unittest.mock import patch
+        with patch('lumina_route_finder.gui.analyze_file') as analyze:
+            entered=threading.Event();release=threading.Event()
+            def delayed(source,root,limit,region,on_created):
+                destination=Path(root)/'unpolled'
+                destination.mkdir(parents=True)
+                on_created(destination)
+                entered.set()
+                release.wait(5)
+                (destination/'route.png').write_bytes(b'result')
+                return {'status':'no_path'},destination,None
+            analyze.side_effect=delayed
+            self.app.worker_thread=threading.Thread(target=self.app.worker,args=(Path('source.jpg'),20,None))
+            self.app.worker_thread.start()
+            self.assertTrue(entered.wait(2))
+            self.app.close()
+            self.assertFalse(self.app.closed)
+            self.assertTrue(self.app.closing)
+            release.set()
+            deadline=time.monotonic()+5
+            while not self.app.closed and time.monotonic()<deadline:
+                self.root.update()
+                time.sleep(.01)
+            self.assertTrue(self.app.closed)
+            self.assertFalse((self.app.output_root/'unpolled').exists())
+
     def test_unexpected_worker_error_recovers_controls(self):
         self.app.busy=True
         self.app.messages.put(('failed','output is read-only'))
