@@ -44,7 +44,8 @@ def describe_result(result, page=0):
         details = f'同率の最長経路: {total}通り\n候補 {page+1}/{len(result["paths"])} を表示しています。\n\n通過順（段階・列）\n'
         kinds = result.get('content_types')
         details += '\n'.join(f'{i:2}. 第{r}段階・{c}列目' +
-                             (' · '+CONTENT_NAMES[kinds[r-1][c-1]] if kinds else '')
+                             ('（'+CONTENT_NAMES[kinds[r-1][c-1]]+'）'
+                              if kinds and kinds[r-1][c-1] in CONTENT_NAMES else '')
                              for i, (r,c) in enumerate(path,1))
         details = describe_filters(result) + details
         return f'解析完了 · 最大{count}アイコン', details, True
@@ -113,6 +114,7 @@ class Application:
         self.region = None
         self.showing_input = False
         self.drag_start = None
+        self.panning = False
         self.image = None
         self.photo = None
         self.zoom = None  # None = fit to canvas
@@ -186,9 +188,9 @@ class Application:
         horizontal.grid(row=1,column=0,sticky='ew')
         self.canvas.configure(yscrollcommand=vertical.set,xscrollcommand=horizontal.set)
         self.canvas.bind('<Configure>',self.schedule_render)
-        self.canvas.bind('<ButtonPress-1>',self.selection_start)
-        self.canvas.bind('<B1-Motion>',self.selection_drag)
-        self.canvas.bind('<ButtonRelease-1>',self.selection_end)
+        self.canvas.bind('<ButtonPress-1>',self.pointer_start)
+        self.canvas.bind('<B1-Motion>',self.pointer_drag)
+        self.canvas.bind('<ButtonRelease-1>',self.pointer_end)
         toolbar = ttk.Frame(preview_frame)
         toolbar.grid(row=2,column=0,sticky='w',pady=(8,0))
         ttk.Button(toolbar,text='全体表示',command=self.fit).pack(side='left')
@@ -502,6 +504,49 @@ class Application:
         h,w=self.input_image.shape[:2]
         return max(0,min(w,x)),max(0,min(h,y))
 
+    def update_canvas_cursor(self):
+        if self.busy or self.closing or self.image is None:
+            cursor = ''
+        elif self.selecting.get() and self.showing_input:
+            cursor = 'crosshair'
+        elif self.panning:
+            cursor = 'fleur'
+        elif (self.image.shape[1]*self.display_scale > self.canvas.winfo_width() or
+              self.image.shape[0]*self.display_scale > self.canvas.winfo_height()):
+            cursor = 'hand2'
+        else:
+            cursor = ''
+        self.canvas.configure(cursor=cursor)
+
+    def pointer_start(self,event):
+        self.panning = False
+        self.drag_start = None
+        if self.busy or self.closing or self.image is None:
+            return
+        if self.selecting.get() and self.showing_input:
+            self.selection_start(event)
+        elif (self.image.shape[1]*self.display_scale > self.canvas.winfo_width() or
+              self.image.shape[0]*self.display_scale > self.canvas.winfo_height()):
+            self.canvas.scan_mark(event.x,event.y)
+            self.panning = True
+        self.update_canvas_cursor()
+
+    def pointer_drag(self,event):
+        if self.busy or self.closing:
+            return
+        if self.panning:
+            self.canvas.scan_dragto(event.x,event.y,gain=1)
+        elif self.selecting.get() and self.showing_input:
+            self.selection_drag(event)
+
+    def pointer_end(self,event):
+        if self.panning:
+            self.pointer_drag(event)
+            self.panning = False
+            self.update_canvas_cursor()
+        elif self.selecting.get() and self.showing_input:
+            self.selection_end(event)
+
     def selection_start(self,event):
         if self.busy or self.closing or not self.selecting.get() or not self.showing_input or self.input_image is None:
             return
@@ -547,6 +592,7 @@ class Application:
         self.resize_id = self.root.after(80,self.render)
 
     def render(self):
+        self.panning = False
         if self.resize_id is not None:
             self.root.after_cancel(self.resize_id)
         self.resize_id = None
@@ -556,6 +602,7 @@ class Application:
         width,height=max(1,self.canvas.winfo_width()),max(1,self.canvas.winfo_height())
         if self.image is None:
             self.scale_text.set('')
+            self.update_canvas_cursor()
             self.canvas.configure(scrollregion=(0,0,width,height))
             self.canvas.create_text(width/2,height/2,text='入力画像と解析結果をここに表示します',fill='#65768b',width=max(100,width-40))
             return
@@ -575,6 +622,7 @@ class Application:
         self.draw_region(self.region)
         self.canvas.configure(scrollregion=(0,0,max(width,dw),max(height,dh)))
         self.scale_text.set(f'{scale:.0%}')
+        self.update_canvas_cursor()
 
     def fit(self):
         self.zoom=None
@@ -609,6 +657,7 @@ class Application:
         if self.closed or self.closing:
             return
         self.closing=True
+        self.progress.stop()
         self.save_settings()
         for callback in (self.poll_id,self.resize_id):
             if callback is not None:

@@ -34,7 +34,7 @@ def templates():
     return variants
 
 
-def classify_contents(board):
+def classify_contents(board, *, strict=True):
     labels, diagnostics, uncertain = {}, [], []
     for row in range(10):
         for col in range(5):
@@ -44,12 +44,14 @@ def classify_contents(board):
                              for key,variants in templates().items()), reverse=True)
             score,key = scores[0]
             margin = score-scores[1][0]
-            diagnostics.append({'node':[row+1,col+1], 'content':key, 'score':score, 'margin':margin})
             if not np.isfinite(score) or score < .60 or margin < .08:
                 uncertain.append(issue('AMBIGUOUS_CONTENT',
                                        f'Cannot identify mission at row {row+1}, column {col+1}.',
                                        (x-20,y-20,40,40)))
-            labels[row,col] = key
-    if uncertain:
+                labels[row,col] = None
+            else:
+                labels[row,col] = key
+            diagnostics.append({'node':[row+1,col+1], 'content':labels[row,col], 'score':score, 'margin':margin})
+    if uncertain and strict:
         raise RecognitionError(uncertain, board)
     return labels, diagnostics

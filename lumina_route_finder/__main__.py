@@ -43,15 +43,15 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
             write_image(destination/'input.png',input_image)
         board, origin, edges, diagnostics, score = recognize(input_image)
         origin=(origin[0]+offset[0],origin[1]+offset[1])
-        labels = None
+        from .contents import CONTENT_NAMES, classify_contents
         excluded_types = tuple(excluded_types)
-        if avoid_repeated or excluded_types:
-            from .contents import CONTENT_NAMES, classify_contents
-            if any(key not in CONTENT_NAMES for key in excluded_types):
-                raise ValueError('Unknown excluded content type')
-            labels, content_diagnostics = classify_contents(board)
-            result['content_types'] = [[labels[r,c] for c in range(5)] for r in range(10)]
-            result['content_diagnostics'] = content_diagnostics
+        if any(key not in CONTENT_NAMES for key in excluded_types):
+            raise ValueError('Unknown excluded content type')
+        filtered = bool(avoid_repeated or excluded_types)
+        labels, content_diagnostics = classify_contents(board, strict=filtered)
+        result['content_types'] = [[labels[r,c] for c in range(5)] for r in range(10)]
+        result['content_diagnostics'] = content_diagnostics
+        if filtered:
             result['filters'] = {'avoid_repeated':avoid_repeated, 'excluded_types':list(excluded_types)}
         solved = solve([(r,c) for r in range(10) for c in range(5)],edges,limit,
                        node_types=labels, excluded_types=excluded_types, avoid_repeated=avoid_repeated)

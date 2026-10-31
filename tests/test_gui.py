@@ -20,6 +20,18 @@ class ResultDescriptionTests(unittest.TestCase):
         self.assertIn('カーソル',details)
         self.assertIn('CURSOR_OCCLUSION',details)
 
+    def test_path_names_and_unknown_are_displayed_without_filters(self):
+        result={'status':'ok','max_count':2,'optimal_path_count':2,
+                'paths':[[[1,1],[2,1]],[[1,2],[2,1]]],
+                'content_types':[['escape_room','element_tiles'],[None,None]]}
+        _,details,success=describe_result(result)
+        self.assertTrue(success)
+        self.assertIn('1. 第1段階・1列目（エスケープルーム）',details)
+        self.assertIn('2. 第2段階・1列目',details)
+        self.assertNotIn('第2段階・1列目（',details)
+        self.assertNotIn('判別不能',details)
+        self.assertIn('第1段階・2列目（属性タイル渡り）',describe_result(result,1)[1])
+
     def test_no_path_is_not_success(self):
         self.assertFalse(describe_result({'status':'no_path'})[2])
 
@@ -220,6 +232,56 @@ class GuiTests(unittest.TestCase):
         self.assertIsNone(self.app.region)
         self.assertIsNone(self.app.result)
         self.assertTrue(self.app.showing_input)
+
+    def test_drag_pans_zoomed_input_and_result_without_changing_region(self):
+        import numpy as np
+        self.app.input_image=np.zeros((500,1000,3),dtype=np.uint8)
+        for showing_input in (True,False):
+            with self.subTest(showing_input=showing_input):
+                self.app.showing_input=showing_input
+                self.app.image=self.app.input_image
+                self.app.zoom=2
+                self.app.region=(50,60,300,400)
+                self.app.render()
+                self.app.canvas.xview_moveto(0)
+                self.app.canvas.yview_moveto(0)
+                before=(self.app.canvas.xview()[0],self.app.canvas.yview()[0])
+                self.app.pointer_start(SimpleNamespace(x=100,y=100))
+                self.assertTrue(self.app.panning)
+                self.app.pointer_drag(SimpleNamespace(x=40,y=30))
+                self.app.pointer_end(SimpleNamespace(x=40,y=30))
+                self.assertGreater(self.app.canvas.xview()[0],before[0])
+                self.assertGreater(self.app.canvas.yview()[0],before[1])
+                self.assertEqual(self.app.region,(50,60,300,400))
+                self.assertFalse(self.app.panning)
+                self.assertEqual(self.app.canvas.cget('cursor'),'hand2')
+                self.app.fit()
+                self.assertFalse(self.app.panning)
+                self.assertEqual(self.app.canvas.xview()[0],0)
+                self.assertEqual(self.app.canvas.yview()[0],0)
+
+    def test_region_mode_uses_drag_for_selection_and_busy_blocks_panning(self):
+        import numpy as np
+        self.app.input_image=np.zeros((500,1000,3),dtype=np.uint8)
+        self.app.show_input()
+        self.app.selecting.set(True)
+        self.app.zoom=2
+        self.app.render()
+        before=(self.app.canvas.xview(),self.app.canvas.yview())
+        self.app.pointer_start(SimpleNamespace(x=20,y=20))
+        self.assertFalse(self.app.panning)
+        self.assertIsNotNone(self.app.drag_start)
+        self.app.pointer_drag(SimpleNamespace(x=180,y=180))
+        self.assertEqual((self.app.canvas.xview(),self.app.canvas.yview()),before)
+        self.app.pointer_end(SimpleNamespace(x=180,y=180))
+        self.assertIsNotNone(self.app.region)
+        self.app.selecting.set(False)
+        self.app.zoom=2
+        self.app.render()
+        self.app.busy=True
+        self.app.pointer_start(SimpleNamespace(x=100,y=100))
+        self.assertFalse(self.app.panning)
+        self.app.busy=False
 
     def test_selection_coordinates_account_for_zoom_offsets_and_scroll(self):
         from unittest.mock import patch

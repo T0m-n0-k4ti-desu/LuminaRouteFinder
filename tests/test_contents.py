@@ -48,11 +48,33 @@ class ContentTests(unittest.TestCase):
             classify_contents(board)
         self.assertEqual(caught.exception.issues[0]['code'],'AMBIGUOUS_CONTENT')
 
-    def test_disabled_filters_do_not_classify(self):
-        with tempfile.TemporaryDirectory() as temp, patch('lumina_route_finder.contents.classify_contents',side_effect=AssertionError('must not classify')):
+    def test_default_search_identifies_types_without_filtering_paths(self):
+        with tempfile.TemporaryDirectory() as temp:
             result = run_image(self.source,Path(temp))
+        board,_,edges,_,_ = recognize(self.full)
+        from lumina_route_finder.solver import solve
+        expected = solve([(r,c) for r in range(10) for c in range(5)],edges)
         self.assertEqual(result['status'],'ok')
-        self.assertNotIn('content_types',result)
+        self.assertEqual(result['max_count'],expected['max_count'])
+        self.assertEqual(result['optimal_path_count'],expected['optimal_path_count'])
+        self.assertEqual(result['paths'],[[[r+1,c+1] for r,c in path] for path in expected['paths']])
+        self.assertEqual(result['content_types'],EXPECTED)
+        self.assertNotIn('filters',result)
+
+    def test_unknown_content_does_not_block_unfiltered_search(self):
+        board,origin,edges,diagnostics,score = recognize(self.full)
+        board[12:39,16:43] = 128
+        labels,_ = classify_contents(board, strict=False)
+        self.assertIsNone(labels[0,0])
+        self.assertEqual(labels[0,1],EXPECTED[0][1])
+        with tempfile.TemporaryDirectory() as temp, patch('lumina_route_finder.__main__.recognize',
+                return_value=(board,origin,edges,diagnostics,score)):
+            result = run_image(self.source,Path(temp))
+            strict = run_image(self.source,Path(temp)/'strict',avoid_repeated=True)
+        self.assertEqual(result['status'],'ok')
+        self.assertIsNone(result['content_types'][0][0])
+        self.assertEqual(strict['status'],'error')
+        self.assertEqual(strict['errors'][0]['code'],'AMBIGUOUS_CONTENT')
 
     def test_excluded_bottleneck_has_no_path(self):
         with tempfile.TemporaryDirectory() as temp:
