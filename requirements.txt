@@ -1,2 +1,3 @@
 numpy>=1.24,<3
 opencv-python>=4.9,<5
+tkinterdnd2>=0.7,<1

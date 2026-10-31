@@ -14,6 +14,36 @@ python -m pip install -r requirements.txt
 
 すでにOpenCV・NumPyが利用できるPythonなら、その環境でも実行できます。外部APIやOCR実行ファイルは使いません。
 
+## GUIで使う
+
+依存ライブラリを更新して起動します。
+
+```powershell
+python -m pip install -r requirements.txt
+python -m lumina_route_finder.gui
+```
+
+Windowsでは `launch_gui.pyw` のダブルクリックでも起動できます。Pythonとのファイル関連付け・依存ライブラリの準備が必要です。
+
+1. 画像パスを入力するか、「画像を選択…」から選びます。パス欄・ドロップ領域・画像表示領域へのD&Dでも指定できます。
+2. 「解析」を押します。解析中はボタンを無効化し、進行表示を出します。
+3. 成功時は最大通過数と経路画像、通過順を表示します。画像は全体表示・拡大縮小・スクロールで確認できます。
+4. エラー時は日本語の理由と対応方法、エラー箇所を示す画像に切り替わります。盤面を検出できない場合は入力画像、画像自体を読み込めない場合は理由のみ表示します。
+
+画像を変更すると前の結果を画面から消します。入力は1枚ずつです。同率最長経路がある場合は代表の1枚を表示します。
+
+結果は実行フォルダー内の `outputs/gui/` の下に実行ごとの新しいフォルダーとして保存します。「結果フォルダーを開く」から参照できます。既存の出力を上書きしません。ダブルクリック起動ではリポジトリ内が保存先です。
+
+```powershell
+# 起動時に画像を指定（解析はボタンで開始）
+python -m lumina_route_finder.gui ..\sample_image\TWCI_2026_11_1_1_2_47.jpg
+
+# 保存先の変更
+python -m lumina_route_finder.gui --output-dir D:\LuminaResults
+```
+
+GUIはPython付属のTkinterと、ファイルD&D用の [tkinterdnd2](https://github.com/Eliav2/tkinterdnd2) を使用します。解析は別スレッドで実行します。認識できる画面条件はCLIと同じです。
+
 ## 実行
 
 現在のフォルダー構成では、画像フォルダーはリポジトリの1階層上にあります。
@@ -95,3 +125,5 @@ python tools\build_templates.py ..
 ```
 
 設計の詳細は [DESIGN.md](DESIGN.md) を参照してください。
+
+GUIのテストでは、空白・日本語を含むD&Dパス、非同期解析、成功後のエラー遷移、読み込めない画像、想定外エラーからの操作復帰を確認します。画面表示を利用できない環境ではTkウィジェットのテストをスキップします。

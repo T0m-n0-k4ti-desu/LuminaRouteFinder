@@ -7,10 +7,13 @@ name = "lumina-route-finder"
 version = "0.1.0"
 description = "Local image recognition and longest path search for Lumina Corridor"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24,<3", "opencv-python>=4.9,<5"]
+dependencies = ["numpy>=1.24,<3", "opencv-python>=4.9,<5", "tkinterdnd2>=0.7,<1"]
 
 [project.scripts]
 lumina-route-finder = "lumina_route_finder.__main__:main"
+
+[project.gui-scripts]
+lumina-route-finder-gui = "lumina_route_finder.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["lumina_route_finder*"]
