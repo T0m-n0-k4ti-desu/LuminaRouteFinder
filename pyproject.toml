@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lumina-route-finder"
+version = "0.1.0"
+description = "Local image recognition and longest path search for Lumina Corridor"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24,<3", "opencv-python>=4.9,<5"]
+
+[project.scripts]
+lumina-route-finder = "lumina_route_finder.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["lumina_route_finder*"]
+
+[tool.setuptools.package-data]
+lumina_route_finder = ["assets/*.png"]

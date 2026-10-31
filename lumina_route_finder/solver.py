@@ -1,4 +1,4 @@
-﻿"""Longest simple paths on a downward layered board."""
+"""Longest simple paths on a downward layered board."""
 from collections import defaultdict
 
 

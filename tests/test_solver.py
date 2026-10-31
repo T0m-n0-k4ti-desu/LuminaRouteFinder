@@ -1,4 +1,4 @@
-﻿import random
+import random
 import unittest
 from lumina_route_finder.solver import solve
 
