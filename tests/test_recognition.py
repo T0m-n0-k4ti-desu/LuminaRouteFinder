@@ -84,7 +84,7 @@ class RecognitionTests(unittest.TestCase):
         self.assertIn('INVALID_BOARD_STRUCTURE',[i['code'] for i in caught.exception.issues])
 
     def test_unsupported_scale_and_cropped_board_rejected(self):
-        for image in [cv2.resize(self.first,None,fx=.75,fy=.75),self.first[:700]]:
+        for image in [cv2.resize(self.first,None,fx=.5,fy=.5),self.first[:700]]:
             with self.assertRaises(RecognitionError):
                 recognize(image)
 

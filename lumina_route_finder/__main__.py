@@ -32,7 +32,7 @@ def run_image(source, destination, limit=20):
         solved = solve([(r,c) for r in range(10) for c in range(5)],edges,limit)
         result.update(export_solution(solved))
         result['board_origin'] = origin
-        result['header_match'] = score
+        result['board_match'] = score
         graph = {'nodes': [[r+1,c+1] for r in range(10) for c in range(5)],
                  'edges': [{'from':[u[0]+1,u[1]+1], 'to':[v[0]+1,v[1]+1]} for u,v in edges],
                  'diagnostics': [{**d,'from':[d['from'][0]+1,d['from'][1]+1],

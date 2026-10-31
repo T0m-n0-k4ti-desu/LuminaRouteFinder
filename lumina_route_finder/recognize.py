@@ -1,11 +1,11 @@
-"""Image recognition for the supplied 1x Lumina UI layout."""
+"""Recognize a complete Lumina board, including scaled images and board crops."""
 from pathlib import Path
 from functools import lru_cache
 import cv2
 import numpy as np
 
 ASSETS = Path(__file__).parent / 'assets'
-CONFIG_VERSION = 'sample-layout-v1'
+CONFIG_VERSION = 'normalized-grid-v2'
 
 
 class RecognitionError(Exception):
@@ -32,7 +32,7 @@ def read_image(path):
     return image
 
 
-def locate(image):
+def locate_native(image):
     template = read_image(ASSETS / 'window.png')
     h, w = template.shape[:2]
     if image.shape[0] < h or image.shape[1] < w:
@@ -50,6 +50,34 @@ def locate(image):
     if ox < 0 or oy < 0 or ox + 260 > image.shape[1] or oy + 500 > image.shape[0]:
         raise RecognitionError([issue('BOARD_NOT_FOUND', 'Board is cropped.')])
     return image[oy:oy+500, ox:ox+260].copy(), (ox, oy), float(score)
+
+
+def locate_details(image):
+    from .locate import find_grids, normalize
+    native = None
+    try:
+        board,origin,score=locate_native(image)
+        native = (board,origin,score,(1.,1.))
+        if score >= .99:
+            return native
+    except RecognitionError as exc:
+        if exc.issues[0]['code']=='MULTIPLE_BOARDS':
+            raise
+    grids=find_grids(image)
+    if len(grids)>1:
+        raise RecognitionError([issue('MULTIPLE_BOARDS','Multiple complete icon grids found.')])
+    if not grids and native is not None:
+        if not validate(native[0]):
+            return native
+    if not grids:
+        raise RecognitionError([issue('BOARD_NOT_FOUND','A complete 5-column, 10-row board could not be located.')])
+    origin,scale,score=grids[0]
+    return normalize(image,origin,scale),origin,score,scale
+
+
+def locate(image):
+    board,origin,score,_=locate_details(image)
+    return board,origin,score
 
 
 def validate(board, cursor_image=None, cursor_offset=(0,0)):
@@ -81,17 +109,17 @@ def validate(board, cursor_image=None, cursor_offset=(0,0)):
     # Use saturated purple border only, excluding background and pale interior.
     th = cv2.cvtColor(template, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(th, (115, 45, 35), (165, 255, 240))
-    scores = cv2.matchTemplate(cursor_image, template, cv2.TM_CCORR_NORMED, mask=mask)
-    scores = np.nan_to_num(scores, nan=0, posinf=0, neginf=0)
-    _, score, _, (x,y) = cv2.minMaxLoc(scores)
-    # The color correlation of an absent cursor can be high; also require its
-    # distinctive dark triangular border to match in absolute color.
+    # Absolute masked error is stable after resampling; color correlation can
+    # prefer a purple icon over a slightly blurred cursor.
+    scores = cv2.matchTemplate(cursor_image, template, cv2.TM_SQDIFF, mask=mask)
+    score, _, (x,y), _ = cv2.minMaxLoc(scores)
+    rms = np.sqrt(max(0,score)/(np.count_nonzero(mask)*3))
     patch = cursor_image[y:y+template.shape[0],x:x+template.shape[1]]
     delta = np.mean(np.abs(patch.astype(float)-template.astype(float))[mask > 0])
     x += cursor_offset[0]
     y += cursor_offset[1]
     overlaps = x < 260 and y < 500 and x+template.shape[1] > 0 and y+template.shape[0] > 0
-    if score > .97 and delta < 23 and overlaps:
+    if rms < 42 and delta < 30 and overlaps:
         issues.append(issue('CURSOR_OCCLUSION', 'Move the cursor outside the board.', (x-3,y-3,template.shape[1]+6,template.shape[0]+6)))
     if any(i['code'] == 'INCOMPLETE_BOARD' for i in issues):
         issues = [i for i in issues if i['code'] != 'INVALID_BOARD_STRUCTURE']
@@ -141,11 +169,10 @@ def edge_score(board, u, v, contrast=None):
 
 
 def recognize(image):
-    board, origin, header_score = locate(image)
-    ox,oy=origin
-    left,top=max(0,ox-40),max(0,oy-40)
-    context=image[top:min(image.shape[0],oy+540),left:min(image.shape[1],ox+300)]
-    issues = validate(board,context,(left-ox,top-oy))
+    from .locate import normalize
+    board, origin, header_score, scale = locate_details(image)
+    context=normalize(image,origin,scale,margin=40)
+    issues = validate(board,context,(-40,-40))
     if issues:
         raise RecognitionError(issues, board, origin)
     edges, diagnostics, uncertain = [], [], []
@@ -154,7 +181,7 @@ def recognize(image):
         score, area = edge_score(board,u,v,contrast)
         diagonal = u[0] != v[0] and u[1] != v[1]
         present = score >= (14 if diagonal else 6)
-        ambiguous = (2 <= score < 14) if diagonal else (2 <= score < 6)
+        ambiguous = (3 <= score < 14) if diagonal else (3 <= score < 6)
         state = 'uncertain' if ambiguous else ('present' if present else 'absent')
         diagnostics.append({'from':u,'to':v,'dark_pixels':score,'area':area,'state':state})
         if ambiguous:

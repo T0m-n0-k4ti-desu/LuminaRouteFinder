@@ -1,4 +1,4 @@
-﻿"""Validate the frozen Windows GUI without requiring Python on its runtime path."""
+﻿"""Validate the frozen Windows GUI on a full screenshot and a board-only crop."""
 import json
 from pathlib import Path
 import subprocess
@@ -7,19 +7,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_executable():
-    report = ROOT / 'outputs/exe-smoke/report.json'
-    report.unlink(missing_ok=True)
     startup = subprocess.STARTUPINFO()
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startup.wShowWindow = subprocess.SW_HIDE
-    subprocess.run([str(ROOT/'dist/LuminaRouteFinder.exe'),
-                    '--smoke-test', str(ROOT/'docs/images/sample_image.jpg'),
-                    '--report', str(report)], check=True, timeout=45, startupinfo=startup)
-    result = json.loads(report.read_text(encoding='utf-8'))
-    if result['status'] != 'ok' or result['max_count'] != 14 or not result['has_preview']:
-        raise RuntimeError(f'Unexpected frozen GUI result: {result}')
-    print('Frozen GUI: TkDnD, recognition and preview verified (14 icons).')
+    cases=[('full',ROOT/'docs/images/sample_image.jpg',14),
+           ('crop',ROOT/'tests/fixtures/board_crop.jpg',18)]
+    for name,source,expected in cases:
+        report=ROOT/f'outputs/exe-smoke/{name}_report.json'
+        report.unlink(missing_ok=True)
+        subprocess.run([str(ROOT/'dist/LuminaRouteFinder.exe'),
+                        '--smoke-test',str(source),'--report',str(report)],
+                       check=True,timeout=45,startupinfo=startup)
+        result=json.loads(report.read_text(encoding='utf-8'))
+        if result['status']!='ok' or result['max_count']!=expected or not result['has_preview']:
+            raise RuntimeError(f'Unexpected frozen GUI result: {result}')
+        print(f'Frozen GUI: {name}, TkDnD and preview verified ({expected} icons).',flush=True)
 
 
-if __name__ == '__main__':
+if __name__=='__main__':
     test_executable()
