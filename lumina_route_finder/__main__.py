@@ -6,6 +6,7 @@ import sys
 import cv2
 from .recognize import RecognitionError, CONFIG_VERSION, center, read_image, recognize
 from .solver import solve
+from .render import render_route
 
 
 def write_image(path, image):
@@ -43,16 +44,9 @@ def run_image(source, destination, limit=20):
             a=tuple(2*x for x in center(u)); b=tuple(2*x for x in center(v))
             cv2.line(recognized,a,b,(0,0,255),1,cv2.LINE_AA)
         write_image(destination/'recognized.png',recognized)
-        if solved['paths']:
-            path=solved['paths'][0]
-            for u,v in zip(path,path[1:]):
-                a=tuple(2*x for x in center(u)); b=tuple(2*x for x in center(v))
-                cv2.arrowedLine(display,a,b,(0,60,255),2,cv2.LINE_AA,tipLength=.18)
-            for i,n in enumerate(path,1):
-                x,y=center(n)
-                cv2.circle(display,(2*x,2*y),10,(255,255,255),-1)
-                cv2.putText(display,str(i),(2*x-9,2*y+5),cv2.FONT_HERSHEY_SIMPLEX,.4,(0,0,0),1,cv2.LINE_AA)
-        write_image(destination/'route.png',display)
+        write_image(destination/'board.png',board)
+        path = solved['paths'][0] if solved['paths'] else []
+        write_image(destination/'route.png',render_route(board,path))
     except RecognitionError as exc:
         result.update(status='error', errors=exc.issues)
         if exc.board is not None:

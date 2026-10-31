@@ -96,6 +96,52 @@ class GuiTests(unittest.TestCase):
         self.assertTrue((self.app.destination/'error.png').is_file())
         self.assertNotIn('disabled',self.app.analyze_button.state())
 
+    def test_pages_update_image_details_and_button_states(self):
+        import numpy as np
+        self.app.board=np.zeros((500,260,3),dtype=np.uint8)
+        self.app.result={'status':'ok','max_count':2,'optimal_path_count':2,
+                         'paths':[[[1,1],[2,1]],[[1,2],[2,2]]],'paths_truncated':False}
+        self.app.show_page(0)
+        first=self.app.image.copy()
+        self.assertEqual(self.app.page_text.get(),'候補 1 / 2')
+        self.assertIn('disabled',self.app.previous_button.state())
+        self.app.change_page(1)
+        self.assertEqual(self.app.page_text.get(),'候補 2 / 2')
+        self.assertIn('第1段階・2列目',self.app.details.get('1.0','end'))
+        self.assertFalse(np.array_equal(first,self.app.image))
+        self.assertIn('disabled',self.app.next_button.state())
+        self.app.change_page(-1)
+        self.assertTrue(np.array_equal(first,self.app.image))
+        self.app.path.set('new.jpg')
+        self.assertEqual(self.app.page_text.get(),'')
+        self.assertIn('disabled',self.app.next_button.state())
+        self.assertEqual(self.app.progress.winfo_manager(),'')
+
+    @unittest.skipUnless(NORMAL.is_file(),'External samples unavailable')
+    def test_next_page_fetches_more_and_progress_is_only_visible_while_busy(self):
+        source=NORMAL.with_name('TWCI_2026_11_1_1_2_58.jpg')
+        if not source.is_file():
+            self.skipTest('Sample with multiple optimal paths unavailable')
+        self.assertEqual(self.app.progress.winfo_manager(),'')
+        self.app.path.set(str(source))
+        self.app.start(limit=1)
+        self.assertEqual(self.app.progress.winfo_manager(),'pack')
+        self.wait_for_analysis()
+        self.assertEqual(self.app.progress.winfo_manager(),'')
+        self.assertEqual(len(self.app.result['paths']),1)
+        self.assertTrue(self.app.result['paths_truncated'])
+        first=self.app.image.copy()
+        self.app.change_page(1)
+        self.assertTrue(self.app.busy)
+        self.wait_for_analysis()
+        self.assertEqual(self.app.page,1)
+        self.assertEqual(len(self.app.result['paths']),2)
+        self.assertEqual(self.app.page_text.get(),'候補 2 / 8')
+        self.assertEqual(self.app.progress.winfo_manager(),'')
+        self.app.change_page(-1)
+        import numpy as np
+        self.assertTrue(np.array_equal(first,self.app.image))
+
     def test_unexpected_worker_error_recovers_controls(self):
         self.app.busy=True
         self.app.messages.put(('failed','output is read-only'))

@@ -17,6 +17,7 @@ from tkinterdnd2 import COPY, DND_FILES, TkinterDnD
 
 from .__main__ import run_image
 from .recognize import RecognitionError, read_image
+from .render import render_route
 
 ERROR_MESSAGES = {
     'INPUT_READ_ERROR': '画像を読み込めません。ファイルが存在し、対応する画像形式か確認してください。',
@@ -30,13 +31,13 @@ ERROR_MESSAGES = {
 }
 
 
-def describe_result(result):
+def describe_result(result, page=0):
     """Return a user-facing title, details and whether this is a success."""
     if result['status'] == 'ok':
         count = result['max_count']
         total = result['optimal_path_count']
-        path = result['paths'][0]
-        details = f'同率の最長経路: {total}通り\n画像には代表の1経路を表示しています。\n\n通過順（段階・列）\n'
+        path = result['paths'][page]
+        details = f'同率の最長経路: {total}通り\n候補 {page+1}/{len(result["paths"])} を表示しています。\n\n通過順（段階・列）\n'
         details += '\n'.join(f'{i:2}. 第{r}段階・{c}列目' for i, (r,c) in enumerate(path,1))
         return f'解析完了 · 最大{count}アイコン', details, True
     if result['status'] == 'no_path':
@@ -51,14 +52,14 @@ def describe_result(result):
     return '解析できませんでした', '\n\n'.join(messages), False
 
 
-def analyze_file(source, output_root):
+def analyze_file(source, output_root, limit=20):
     """Run analysis into a newly allocated folder; no earlier result is overwritten."""
     source, output_root = Path(source), Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     prefix = datetime.now().strftime('%Y%m%d_%H%M%S_')
     destination = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
-    result = run_image(source, destination)
-    name = 'error.png' if result['status'] == 'error' else 'route.png'
+    result = run_image(source, destination, limit=limit)
+    name = 'error.png' if result['status'] == 'error' else ('board.png' if result['status'] == 'ok' else 'route.png')
     preview = destination / name
     if not preview.is_file():
         preview = source  # e.g. the window could not be located: show the input.
@@ -73,6 +74,11 @@ class Application:
     def __init__(self, root, output_root=Path('outputs/gui')):
         self.root = root
         self.output_root = Path(output_root)
+        self.result = None
+        self.board = None
+        self.page = 0
+        self.page_limit = 20
+        self.requested_page = 0
         self.busy = False
         self.closed = False
         self.messages = queue.Queue()
@@ -108,8 +114,8 @@ class Application:
                                    bg='#eef3f8',fg='#42556b',pady=12,highlightthickness=1,highlightbackground='#b8c9da')
         self.drop_label.pack(fill='x',pady=(10,12))
         self.progress = ttk.Progressbar(main,mode='indeterminate')
-        self.progress.pack(fill='x',pady=(0,10))
         body = ttk.Frame(main)
+        self.body = body
         body.pack(fill='both',expand=True)
         body.columnconfigure(0,weight=1)
         body.columnconfigure(1,weight=0)
@@ -133,6 +139,14 @@ class Application:
         ttk.Button(toolbar,text='－',width=4,command=lambda:self.change_zoom(.8)).pack(side='left')
         self.scale_text = tk.StringVar(value='')
         ttk.Label(toolbar,textvariable=self.scale_text).pack(side='left',padx=10)
+        self.pages = ttk.Frame(preview_frame)
+        self.pages.grid(row=3,column=0,sticky='ew',pady=(10,0))
+        self.previous_button = ttk.Button(self.pages,text='← 前へ',command=lambda:self.change_page(-1),state='disabled')
+        self.previous_button.pack(side='left')
+        self.page_text = tk.StringVar(value='')
+        ttk.Label(self.pages,textvariable=self.page_text).pack(side='left',padx=12)
+        self.next_button = ttk.Button(self.pages,text='次へ →',command=lambda:self.change_page(1),state='disabled')
+        self.next_button.pack(side='left')
         sidebar = ttk.Frame(body,width=310)
         sidebar.grid(row=0,column=1,sticky='nsew')
         sidebar.grid_propagate(False)
@@ -163,6 +177,11 @@ class Application:
         self.details.configure(state='disabled')
 
     def clear_result(self):
+        self.result = self.board = None
+        self.page = 0
+        self.page_text.set('')
+        self.previous_button.configure(state='disabled')
+        self.next_button.configure(state='disabled')
         self.image = self.photo = None
         self.zoom = None
         self.destination = None
@@ -201,7 +220,7 @@ class Application:
         self.status.configure(text='解析できませんでした',foreground='#b42318')
         self.set_details(message)
 
-    def start(self):
+    def start(self, limit=20, selected_page=0):
         if self.busy:
             return
         value = self.path.get().strip()
@@ -212,22 +231,28 @@ class Application:
             self.show_error('存在する画像ファイルを指定してください。フォルダーは指定できません。')
             return
         self.clear_result()
+        self.page_limit = limit
+        self.requested_page = selected_page
         self.busy = True
         self.entry.configure(state='disabled')
         self.browse_button.configure(state='disabled')
         self.analyze_button.configure(state='disabled')
         self.status.configure(text='解析中…',foreground='#26374a')
         self.set_details('盤面と接続を確認しています。')
+        self.progress.pack(fill='x',pady=(0,10),before=self.body)
         self.progress.start(12)
-        threading.Thread(target=self.worker,args=(source.resolve(),),daemon=True).start()
+        threading.Thread(target=self.worker,args=(source.resolve(),limit),daemon=True).start()
 
-    def worker(self,source):
+    def worker(self,source,limit):
         try:
-            self.messages.put(('done',analyze_file(source,self.output_root)))
+            self.messages.put(('done',analyze_file(source,self.output_root,limit)))
         except Exception as exc:
             self.messages.put(('failed',str(exc)))
 
     def poll(self):
+        if self.poll_id is not None:
+            self.root.after_cancel(self.poll_id)
+            self.poll_id = None
         if self.closed:
             return
         try:
@@ -237,19 +262,51 @@ class Application:
         else:
             self.busy = False
             self.progress.stop()
+            self.progress.pack_forget()
             for widget in (self.entry,self.browse_button,self.analyze_button):
                 widget.configure(state='normal')
             if kind == 'failed':
                 self.show_error('解析処理を完了できませんでした。\n\n'+payload)
             else:
                 result,self.destination,self.image = payload
+                self.result = result
                 title,details,success = describe_result(result)
                 self.status.configure(text=title,foreground='#147447' if success else '#b42318')
                 self.set_details(details)
                 self.output_label.configure(text=f'保存先:\n{self.destination.resolve()}')
                 self.open_button.configure(state='normal')
-                self.render()
+                if success:
+                    self.board = self.image
+                    self.show_page(min(self.requested_page,len(result['paths'])-1))
+                else:
+                    self.render()
         self.poll_id = self.root.after(80,self.poll)
+
+    def show_page(self, page):
+        if self.result is None or self.result['status'] != 'ok':
+            return
+        self.page = page
+        paths = self.result['paths']
+        path = [(r-1,c-1) for r,c in paths[page]]
+        self.image = render_route(self.board,path)
+        _,details,_ = describe_result(self.result,page)
+        self.set_details(details)
+        total = self.result['optimal_path_count']
+        self.page_text.set(f'候補 {page+1} / {total}')
+        self.previous_button.configure(state='normal' if page else 'disabled')
+        more = page+1 < len(paths) or self.result.get('paths_truncated',False)
+        self.next_button.configure(state='normal' if more else 'disabled')
+        self.render()
+
+    def change_page(self, delta):
+        if self.busy or self.result is None or self.result['status'] != 'ok':
+            return
+        page = self.page + delta
+        if 0 <= page < len(self.result['paths']):
+            self.show_page(page)
+        elif page == len(self.result['paths']) and self.result.get('paths_truncated',False):
+            # Fetch additional optimal paths only when needed; retain the exact total.
+            self.start(limit=self.page_limit*2,selected_page=page)
 
     def schedule_render(self,event=None):
         if self.resize_id is not None:
@@ -257,6 +314,8 @@ class Application:
         self.resize_id = self.root.after(80,self.render)
 
     def render(self):
+        if self.resize_id is not None:
+            self.root.after_cancel(self.resize_id)
         self.resize_id = None
         if self.closed:
             return
