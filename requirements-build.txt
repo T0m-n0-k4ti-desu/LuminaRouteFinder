@@ -1,0 +1,4 @@
+pyinstaller==6.22.3
+numpy==1.26.4
+opencv-python==4.9.0.80
+tkinterdnd2==0.7.0

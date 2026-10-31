@@ -2,6 +2,16 @@
 
 Lumina’s Corridorのスクリーンショットから、第1段階→第10段階の最大通過アイコン数と経路を求めるPythonスクリプトです。横移動は双方向、上移動・同じアイコンの再訪・線の交差点での乗り換えは禁止します。起点・終点を数え、第1・第10段階でも横移動できます。
 
+## Windows版ダウンロード（Python不要）
+
+**[LuminaRouteFinder.exe をダウンロード](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases/latest/download/LuminaRouteFinder.exe)**
+
+[リリース一覧](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases) · [SHA-256チェックサム](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases/latest/download/SHA256SUMS.txt)
+
+Windows 10 / 11 の64ビット向けです。exeを任意の書き込み可能なフォルダーに保存し、ダブルクリックして起動してください。Pythonや追加ライブラリのインストールは不要です。画像を選択またはD&Dし、「解析」を押すと結果を表示します。
+
+結果はexeと同じフォルダーの `outputs/gui/` に保存します。初回起動は同梱ファイルの展開に少し時間がかかる場合があります。この配布物はコード署名を付けていません。
+
 ## 入力画像と解析結果の例
 
 ゲーム内で回廊ミッションのウィンドウを開き、タイトルバーと全10段階、接続線が見える状態で撮影します。下の段の選択を解除し、カーソルを盤面外に移動してください。背景を含むスクリーンショットをそのまま指定できます。
@@ -144,3 +154,17 @@ python tools\build_templates.py ..
 設計の詳細は [DESIGN.md](DESIGN.md) を参照してください。
 
 GUIのテストでは、空白・日本語を含むD&Dパス、非同期解析、成功後のエラー遷移、読み込めない画像、想定外エラーからの操作復帰を確認します。画面表示を利用できない環境ではTkウィジェットのテストをスキップします。
+
+## 配布用exeをビルドする
+
+Windows上で、リポジトリのルートから実行します。ビルド用の依存バージョンは `requirements-build.txt` に固定しています。
+
+```powershell
+python -m venv .venv-build
+.\.venv-build\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv-build\Scripts\python.exe tools\build_exe.py
+```
+
+`dist/LuminaRouteFinder.exe` と `dist/SHA256SUMS.txt` を生成します。ビルド後はexe自体を起動し、GUI・TkDnD・同梱テンプレート・サンプル解析・画像表示を自動確認します。認識用アセットと必要なライブラリをexeに含め、実行時の一時展開先には結果を保存しません。
+
+配布ファイルはGitのソース履歴に入れず、GitHub Releasesの添付ファイルとして公開します。READMEのダウンロードリンクは最新リリースの `LuminaRouteFinder.exe` を参照します。
