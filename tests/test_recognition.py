@@ -109,5 +109,26 @@ class RecognitionTests(unittest.TestCase):
         self.assertEqual(caught.exception.issues[0]['code'],'MULTIPLE_BOARDS')
 
 
+class NormalizationTests(unittest.TestCase):
+    def test_scaled_windows_keep_board_and_graph(self):
+        source = read_image(Path(__file__).resolve().parents[1] / 'docs/images/sample_image.jpg')
+        reference = recognize(source)
+        for scale in (1.25, 1.75, 2.):
+            with self.subTest(scale=scale):
+                image = cv2.resize(source, None, fx=scale, fy=scale)
+                result = recognize(image)
+                self.assertEqual(result[0].shape, (500, 260, 3))
+                self.assertEqual(set(result[2]), set(reference[2]))
+                for actual, expected in zip(result[1], reference[1]):
+                    self.assertAlmostEqual(actual, expected*scale, delta=2)
+
+    def test_background_only_and_cropped_window_rejected(self):
+        source = read_image(Path(__file__).resolve().parents[1] / 'docs/images/sample_image.jpg')
+        for image in (np.zeros_like(source), source[:700]):
+            with self.assertRaises(RecognitionError) as caught:
+                recognize(image)
+            self.assertEqual(caught.exception.issues[0]['code'], 'BOARD_NOT_FOUND')
+
+
 if __name__=='__main__':
     unittest.main()
