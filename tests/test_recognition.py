@@ -83,8 +83,8 @@ class RecognitionTests(unittest.TestCase):
             recognize(changed)
         self.assertIn('INVALID_BOARD_STRUCTURE',[i['code'] for i in caught.exception.issues])
 
-    def test_unsupported_scale_and_cropped_board_rejected(self):
-        for image in [cv2.resize(self.first,None,fx=.75,fy=.75),self.first[:700]]:
+    def test_cropped_board_rejected(self):
+        for image in [self.first[:700]]:
             with self.assertRaises(RecognitionError):
                 recognize(image)
 
@@ -96,6 +96,27 @@ class RecognitionTests(unittest.TestCase):
         with self.assertRaises(RecognitionError) as caught:
             recognize(changed)
         self.assertEqual(caught.exception.issues[0]['code'],'MULTIPLE_BOARDS')
+
+
+class NormalizationTests(unittest.TestCase):
+    def test_scaled_windows_keep_board_and_graph(self):
+        source = read_image(Path(__file__).resolve().parents[1] / 'docs/images/sample_image.jpg')
+        reference = recognize(source)
+        for scale in (1.25, 1.75, 2.):
+            with self.subTest(scale=scale):
+                image = cv2.resize(source, None, fx=scale, fy=scale)
+                result = recognize(image)
+                self.assertEqual(result[0].shape, (500, 260, 3))
+                self.assertEqual(set(result[2]), set(reference[2]))
+                for actual, expected in zip(result[1], reference[1]):
+                    self.assertAlmostEqual(actual, expected*scale, delta=2)
+
+    def test_background_only_and_cropped_window_rejected(self):
+        source = read_image(Path(__file__).resolve().parents[1] / 'docs/images/sample_image.jpg')
+        for image in (np.zeros_like(source), source[:700]):
+            with self.assertRaises(RecognitionError) as caught:
+                recognize(image)
+            self.assertEqual(caught.exception.issues[0]['code'], 'BOARD_NOT_FOUND')
 
 
 if __name__=='__main__':

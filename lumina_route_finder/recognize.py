@@ -1,11 +1,11 @@
-"""Image recognition for the supplied 1x Lumina UI layout."""
+"""Locate scaled Lumina windows and recognize their normalized boards."""
 from pathlib import Path
 from functools import lru_cache
 import cv2
 import numpy as np
 
 ASSETS = Path(__file__).parent / 'assets'
-CONFIG_VERSION = 'sample-layout-v1'
+CONFIG_VERSION = 'normalized-layout-v2'
 
 
 class RecognitionError(Exception):
@@ -32,24 +32,61 @@ def read_image(path):
     return image
 
 
-def locate(image):
+def _locate(image):
+    """Find the window at 0.5–3x scale, then normalize only its board context."""
     template = read_image(ASSETS / 'window.png')
     h, w = template.shape[:2]
-    if image.shape[0] < h or image.shape[1] < w:
+    # Search a reduced image first so large screenshots do not multiply the cost.
+    reduction = min(1., 1920 / image.shape[1])
+    search = cv2.resize(image, None, fx=reduction, fy=reduction,
+                        interpolation=cv2.INTER_AREA) if reduction < 1 else image
+
+    def match(scale, source, factor):
+        width, height = round(w*scale*factor), round(h*scale*factor)
+        if width < 2 or height < 2 or width > source.shape[1] or height > source.shape[0]:
+            return None
+        resized = cv2.resize(template, (width, height), interpolation=cv2.INTER_LINEAR)
+        scores = cv2.matchTemplate(source, resized, cv2.TM_CCOEFF_NORMED)
+        _, score, _, (x, y) = cv2.minMaxLoc(scores)
+        return score, x/factor, y/factor, scale, scores
+
+    coarse = [m[:4] for scale in np.arange(.5, 3.001, .05)
+              if (m := match(float(scale), search, reduction)) is not None]
+    if not coarse:
         raise RecognitionError([issue('BOARD_NOT_FOUND', 'Window header not found.')])
-    scores = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
-    _, score, _, (x, y) = cv2.minMaxLoc(scores)
+    best = max(coarse, key=lambda m: m[0])
+    # Refine scale at original resolution to retain thin text and icon outlines.
+    refined = None
+    for candidate_scale in np.arange(max(.5, best[3]-.05), min(3., best[3]+.05)+.001, .005):
+        candidate = match(float(candidate_scale), image, 1.)
+        if candidate is not None and (refined is None or candidate[0] > refined[0]):
+            refined = candidate
+    score, x, y, scale, scores = refined
     if score < .88:
-        raise RecognitionError([issue('BOARD_NOT_FOUND', 'Supported 1x window header not found.')])
-    suppressed = scores.copy()
-    suppressed[max(0,y-h):y+h, max(0,x-w):x+w] = -1
-    if suppressed.max() >= .88:
+        raise RecognitionError([issue('BOARD_NOT_FOUND', 'Window header not found at 0.5–3x scale.')])
+    for candidate in coarse:
+        other_score, cx, cy, cs = candidate
+        if other_score >= .88 and (abs(cx-x) > w*scale/2 or abs(cy-y) > h*scale*2):
+            raise RecognitionError([issue('MULTIPLE_BOARDS', 'Multiple matching windows found.')])
+    ih, iw = round(h*scale), round(w*scale)
+    scores[max(0,round(y)-ih):round(y)+ih, max(0,round(x)-iw):round(x)+iw] = -1
+    if scores.max() >= .88:
         raise RecognitionError([issue('MULTIPLE_BOARDS', 'Multiple matching windows found.')])
-    # Header asset origin = (633,237), board origin = (715,327).
-    ox, oy = x + 82, y + 90
-    if ox < 0 or oy < 0 or ox + 260 > image.shape[1] or oy + 500 > image.shape[0]:
+    ox, oy = x + 82*scale, y + 90*scale
+    if ox < 0 or oy < 0 or ox+260*scale > image.shape[1] or oy+500*scale > image.shape[0]:
         raise RecognitionError([issue('BOARD_NOT_FOUND', 'Board is cropped.')])
-    return image[oy:oy+500, ox:ox+260].copy(), (ox, oy), float(score)
+    # Keep a margin for cursors partly outside the board. All subsequent geometry
+    # (icons, lines, cursor and diagnostic boxes) uses canonical board pixels.
+    transform = np.array([[1/scale, 0, 40-ox/scale],
+                          [0, 1/scale, 40-oy/scale]], dtype=np.float64)
+    context = cv2.warpAffine(image, transform, (340, 580), flags=cv2.INTER_LINEAR)
+    board = context[40:540, 40:300].copy()
+    return board, (round(ox), round(oy)), float(score), context
+
+
+def locate(image):
+    board, origin, score, _ = _locate(image)
+    return board, origin, score
 
 
 def validate(board, cursor_image=None, cursor_offset=(0,0)):
@@ -141,11 +178,8 @@ def edge_score(board, u, v, contrast=None):
 
 
 def recognize(image):
-    board, origin, header_score = locate(image)
-    ox,oy=origin
-    left,top=max(0,ox-40),max(0,oy-40)
-    context=image[top:min(image.shape[0],oy+540),left:min(image.shape[1],ox+300)]
-    issues = validate(board,context,(left-ox,top-oy))
+    board, origin, header_score, context = _locate(image)
+    issues = validate(board, context, (-40, -40))
     if issues:
         raise RecognitionError(issues, board, origin)
     edges, diagnostics, uncertain = [], [], []
