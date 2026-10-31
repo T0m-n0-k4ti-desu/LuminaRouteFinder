@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 ASSETS = Path(__file__).parent / 'assets'
-CONFIG_VERSION = 'normalized-grid-v2'
+CONFIG_VERSION = 'visible-grid-v3'
 
 
 class RecognitionError(Exception):
@@ -38,18 +38,38 @@ def locate_native(image):
     if image.shape[0] < h or image.shape[1] < w:
         raise RecognitionError([issue('BOARD_NOT_FOUND', 'Window header not found.')])
     scores = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
-    _, score, _, (x, y) = cv2.minMaxLoc(scores)
-    if score < .88:
-        raise RecognitionError([issue('BOARD_NOT_FOUND', 'Supported 1x window header not found.')])
-    suppressed = scores.copy()
-    suppressed[max(0,y-h):y+h, max(0,x-w):x+w] = -1
-    if suppressed.max() >= .88:
-        raise RecognitionError([issue('MULTIPLE_BOARDS', 'Multiple matching windows found.')])
-    # Header asset origin = (633,237), board origin = (715,327).
-    ox, oy = x + 82, y + 90
-    if ox < 0 or oy < 0 or ox + 260 > image.shape[1] or oy + 500 > image.shape[0]:
-        raise RecognitionError([issue('BOARD_NOT_FOUND', 'Board is cropped.')])
-    return image[oy:oy+500, ox:ox+260].copy(), (ox, oy), float(score)
+    matches=[]
+    while len(matches)<12:
+        _,score,_,(x,y)=cv2.minMaxLoc(scores)
+        if score<.88:
+            break
+        scores[max(0,y-h):y+h,max(0,x-w//2):x+w//2]=-1
+        ox,oy=x+82,y+90
+        if ox<0 or oy<0 or ox+260>image.shape[1] or oy+500>image.shape[0]:
+            continue
+        board=image[oy:oy+500,ox:ox+260].copy()
+        # A matching title on a covered window is not a second visible board.
+        if visible_icon_count(board)<43:
+            continue
+        matches.append((board,(ox,oy),float(score)))
+    if len(matches)>1:
+        raise RecognitionError([issue('MULTIPLE_BOARDS','Multiple complete visible boards found.')])
+    if not matches:
+        raise RecognitionError([issue('BOARD_NOT_FOUND','No complete visible board under a matching header.')])
+    return matches[0]
+
+
+def visible_icon_count(board):
+    gray=cv2.cvtColor(board,cv2.COLOR_BGR2GRAY).astype(float)
+    yy,xx=np.mgrid[-22:23,-22:23]
+    dist=np.abs(xx)+np.abs(yy)
+    count=0
+    for r in range(10):
+        for c in range(5):
+            x,y=center((r,c))
+            patch=gray[y-22:y+23,x-22:x+23]
+            count+=float(patch[dist==18].mean()-patch[dist==16].mean())>=12
+    return count
 
 
 def locate_details(image):
@@ -91,7 +111,15 @@ def validate(board, cursor_image=None, cursor_offset=(0,0)):
             patch=gray[y-22:y+23,x-22:x+23]
             # The pale diamond rim must be brighter than its inner border.
             rim=float(patch[dist == 18].mean()-patch[dist == 16].mean())
-            if rim < 12:
+            selected_top=False
+            if r==0:
+                patch_color=board[y-24:y+25,x-24:x+25]
+                h=cv2.cvtColor(patch_color,cv2.COLOR_BGR2HSV)
+                blue_top=cv2.inRange(h,(95,140,130),(115,255,255))
+                yy_top,xx_top=np.mgrid[-24:25,-24:25]
+                ring_top=(np.abs(xx_top)+np.abs(yy_top)>=19)&(np.abs(xx_top)+np.abs(yy_top)<=26)
+                selected_top=np.count_nonzero(blue_top[ring_top])>=30
+            if rim < 12 and not selected_top:
                 issues.append(issue('INVALID_BOARD_STRUCTURE', f'Icon outline missing at row {r+1}, column {c+1}.', (x-22,y-22,44,44)))
     # Strong blue selection outline is distinct from the pale blue background.
     hsv = cv2.cvtColor(board, cv2.COLOR_BGR2HSV)

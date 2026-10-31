@@ -21,12 +21,23 @@ class RecognitionTests(unittest.TestCase):
 
     def test_all_normal_samples(self):
         files=sorted(NORMAL.glob('*.jpg'))
-        self.assertEqual(len(files),14)
+        self.assertGreaterEqual(len(files),14)
         for f in files:
             with self.subTest(image=f.name):
                 _,_,edges,_,_=recognize(read_image(f))
                 result=solve([(r,c) for r in range(10) for c in range(5)],edges)
                 self.assertEqual(result['status'],'ok')
+
+    def test_moved_overlapping_and_background_variants_match_every_edge(self):
+        reference=NORMAL/'TWCI_2026_11_1_3_12_47.jpg'
+        if not reference.is_file():
+            self.skipTest('Additional window variants unavailable')
+        expected=set(recognize(read_image(reference))[2])
+        variants=sorted(NORMAL.glob('TWCI_2026_11_1_3_*.jpg'))+[NORMAL/'cp_image.jpg']
+        for source in variants:
+            if not source.is_file():continue
+            with self.subTest(image=source.name):
+                self.assertEqual(set(recognize(read_image(source))[2]),expected)
 
     def test_visually_reviewed_first_board(self):
         fixture=json.loads((Path(__file__).parent/'fixtures/first_board.json').read_text(encoding='utf-8-sig'))

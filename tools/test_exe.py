@@ -1,4 +1,4 @@
-﻿"""Validate the frozen Windows GUI on a full screenshot and a board-only crop."""
+"""Validate the frozen Windows GUI on a full screenshot and a board-only crop."""
 import json
 from pathlib import Path
 import subprocess
@@ -11,12 +11,14 @@ def test_executable():
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startup.wShowWindow = subprocess.SW_HIDE
     cases=[('full',ROOT/'docs/images/sample_image.jpg',14),
-           ('crop',ROOT/'tests/fixtures/board_crop.jpg',18)]
+           ('crop',ROOT/'tests/fixtures/board_crop.jpg',18),
+           ('clipboard',ROOT/'tests/fixtures/board_crop.jpg',18)]
     for name,source,expected in cases:
         report=ROOT/f'outputs/exe-smoke/{name}_report.json'
         report.unlink(missing_ok=True)
-        subprocess.run([str(ROOT/'dist/LuminaRouteFinder.exe'),
-                        '--smoke-test',str(source),'--report',str(report)],
+        command=[str(ROOT/'dist/LuminaRouteFinder.exe'),'--smoke-test',str(source),'--report',str(report)]
+        if name=='clipboard':command.append('--clipboard-test')
+        subprocess.run(command,
                        check=True,timeout=45,startupinfo=startup)
         result=json.loads(report.read_text(encoding='utf-8'))
         if result['status']!='ok' or result['max_count']!=expected or not result['has_preview']:

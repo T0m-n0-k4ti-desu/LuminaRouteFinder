@@ -1,4 +1,4 @@
-﻿"""Entry point for the standalone Windows application."""
+"""Entry point for the standalone Windows application."""
 import os
 from pathlib import Path
 import sys
@@ -16,11 +16,17 @@ if '--smoke-test' in sys.argv:
     parser=argparse.ArgumentParser()
     parser.add_argument('--smoke-test',type=Path,required=True)
     parser.add_argument('--report',type=Path,required=True)
+    parser.add_argument('--clipboard-test',action='store_true')
     args=parser.parse_args()
     root=TkinterDnD.Tk()
     root.withdraw()
     app=Application(root,args.report.parent/'analysis')
-    app.path.set(str(args.smoke_test))
+    if args.clipboard_test:
+        from PIL import Image
+        with Image.open(args.smoke_test) as source:
+            app.load_pasted_image(source)
+    else:
+        app.path.set(str(args.smoke_test))
     app.start()
     exit_code=[1]
     def finish():

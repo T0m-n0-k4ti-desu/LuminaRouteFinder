@@ -108,9 +108,11 @@ class Application:
         self.entry.pack(side='left',fill='x',expand=True)
         self.browse_button = ttk.Button(inputs,text='画像を選択…',command=self.browse)
         self.browse_button.pack(side='left',padx=8)
+        self.paste_button = ttk.Button(inputs,text='貼り付け',command=self.paste_image)
+        self.paste_button.pack(side='left',padx=(0,8))
         self.analyze_button = ttk.Button(inputs,text='解析',command=self.start)
         self.analyze_button.pack(side='left')
-        self.drop_label = tk.Label(main,text='画像ファイルをここにドラッグ＆ドロップできます（1枚）',
+        self.drop_label = tk.Label(main,text='画像をドロップ、またはCtrl＋Vで貼り付けできます（1枚）',
                                    bg='#eef3f8',fg='#42556b',pady=12,highlightthickness=1,highlightbackground='#b8c9da')
         self.drop_label.pack(fill='x',pady=(10,12))
         self.progress = ttk.Progressbar(main,mode='indeterminate')
@@ -166,6 +168,8 @@ class Application:
             widget.dnd_bind('<<Drop>>',self.on_drop)
         self.path.trace_add('write',self.path_changed)
         self.entry.bind('<Return>',lambda event:self.start())
+        self.root.bind('<Control-v>',self.paste_image)
+        self.root.bind('<Control-V>',self.paste_image)
         self.set_details('パスを入力するか、画像を選択・ドロップして「解析」を押してください。\n\n対応形式: JPG / PNG / BMP\n\n結果の番号はアイコンの通過順です。')
         self.render()
         self.poll_id = root.after(80,self.poll)
@@ -202,6 +206,31 @@ class Application:
         if selected:
             self.path.set(selected)
 
+    def paste_image(self,event=None):
+        if self.busy:
+            return 'break'
+        try:
+            from .clipboard import get_clipboard_image
+            image=get_clipboard_image()
+            if image is None:
+                if event is None:
+                    self.show_error('クリップボードに画像がありません。Win＋Shift＋Sで対象ウィンドウをコピーしてから貼り付けてください。')
+                return None
+            self.load_pasted_image(image)
+            return 'break'
+        except (ImportError,OSError,ValueError) as exc:
+            self.show_error('クリップボード画像を読み込めませんでした。コピーし直してください。\n\n'+str(exc))
+            return 'break'
+
+    def load_pasted_image(self,image):
+        from .clipboard import save_clipboard_image
+        path=save_clipboard_image(image,self.output_root)
+        self.path.set(str(path))
+        self.image=read_image(path)
+        self.status.configure(text='クリップボード画像を読み込みました',foreground='#26374a')
+        self.set_details('画像を確認し、「解析」を押してください。貼り付け画像は保存先のclipboardフォルダーにPNGで保存します。')
+        self.render()
+
     def on_drop(self,event):
         if self.busy:
             return 'refuse_drop'
@@ -236,6 +265,7 @@ class Application:
         self.busy = True
         self.entry.configure(state='disabled')
         self.browse_button.configure(state='disabled')
+        self.paste_button.configure(state='disabled')
         self.analyze_button.configure(state='disabled')
         self.status.configure(text='解析中…',foreground='#26374a')
         self.set_details('盤面と接続を確認しています。')
@@ -263,7 +293,7 @@ class Application:
             self.busy = False
             self.progress.stop()
             self.progress.pack_forget()
-            for widget in (self.entry,self.browse_button,self.analyze_button):
+            for widget in (self.entry,self.browse_button,self.paste_button,self.analyze_button):
                 widget.configure(state='normal')
             if kind == 'failed':
                 self.show_error('解析処理を完了できませんでした。\n\n'+payload)
