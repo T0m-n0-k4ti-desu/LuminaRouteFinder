@@ -10,7 +10,7 @@ import sys
 import tempfile
 import threading
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 
 import cv2
 from tkinterdnd2 import COPY, DND_FILES, TkinterDnD
@@ -19,6 +19,7 @@ from .__main__ import run_image
 from .recognize import RecognitionError, read_image
 from .render import render_route
 from .contents import CONTENT_NAMES
+from .session import SessionOutputs,load_cleanup_setting,save_cleanup_setting
 
 ERROR_MESSAGES = {
     'AMBIGUOUS_CONTENT': 'コンテンツの種類を確定できません。画像の画質や遮蔽を確認するか、除外オプションをオフにしてください。',
@@ -69,12 +70,14 @@ def describe_filters(result):
     return '\n'.join(lines)+'\n\n' if lines else ''
 
 
-def analyze_file(source, output_root, limit=20, region=None, *, avoid_repeated=False, excluded_types=()):
+def analyze_file(source, output_root, limit=20, region=None, on_created=None, *, avoid_repeated=False, excluded_types=()):
     """Run analysis into a newly allocated folder; no earlier result is overwritten."""
     source, output_root = Path(source), Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     prefix = datetime.now().strftime('%Y%m%d_%H%M%S_')
     destination = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
+    if on_created is not None:
+        on_created(destination)
     result = run_image(source, destination, limit=limit, region=region,
                        avoid_repeated=avoid_repeated, excluded_types=excluded_types)
     name = 'error.png' if result['status'] == 'error' else ('board.png' if result['status'] == 'ok' else 'route.png')
@@ -91,7 +94,13 @@ def analyze_file(source, output_root, limit=20, region=None, *, avoid_repeated=F
 class Application:
     def __init__(self, root, output_root=Path('outputs/gui')):
         self.root = root
-        self.output_root = Path(output_root)
+        self.output_root = Path(output_root).resolve()
+        self.session_outputs=SessionOutputs(self.output_root)
+        self.settings_path=self.output_root/'gui-settings.json'
+        self.delete_outputs=tk.BooleanVar(master=root,value=load_cleanup_setting(self.settings_path))
+        self.worker_thread=None
+        self.closing=False
+        self.close_wait_id=None
         self.result = None
         self.board = None
         self.page = 0
@@ -160,6 +169,8 @@ class Application:
         body = ttk.Frame(main)
         self.body = body
         body.pack(fill='both',expand=True)
+        self.cleanup_check=ttk.Checkbutton(main,text='終了時に今回の出力（解析結果・貼り付け画像）を削除',variable=self.delete_outputs,command=self.save_settings)
+        self.cleanup_check.pack(anchor='w',pady=(12,0))
         body.columnconfigure(0,weight=1)
         body.columnconfigure(1,weight=0)
         body.rowconfigure(0,weight=1)
@@ -252,7 +263,7 @@ class Application:
         self.render()
 
     def path_changed(self,*_):
-        if self.busy:
+        if self.busy or self.closing:
             return
         self.input_image=None
         self.region=None
@@ -276,7 +287,7 @@ class Application:
             self.path.set(selected)
 
     def paste_image(self,event=None):
-        if self.busy:
+        if self.busy or self.closing:
             return 'break'
         try:
             from .clipboard import get_clipboard_image
@@ -299,6 +310,7 @@ class Application:
     def load_pasted_image(self,image):
         from .clipboard import save_clipboard_image
         path=save_clipboard_image(image,self.output_root)
+        self.session_outputs.add_file(path)
         self.path.set(str(path))
         self.input_image=read_image(path)
         self.show_input()
@@ -307,7 +319,7 @@ class Application:
         self.render()
 
     def on_drop(self,event):
-        if self.busy:
+        if self.busy or self.closing:
             return 'refuse_drop'
         try:
             paths = self.root.tk.splitlist(event.data)
@@ -325,7 +337,7 @@ class Application:
         self.set_details(message)
 
     def options_changed(self,event=None):
-        if self.busy:
+        if self.busy or self.closing:
             return
         self.content_list.configure(state='normal' if self.exclude_enabled.get() else 'disabled')
         if self.result is not None:
@@ -335,7 +347,7 @@ class Application:
             self.set_details('現在の条件で探索するには「解析」を押してください。')
 
     def start(self, limit=20, selected_page=0):
-        if self.busy:
+        if self.busy or self.closing:
             return
         value = self.path.get().strip()
         if len(value)>1 and value[0]==value[-1] and value[0] in ('"',"'"):
@@ -370,11 +382,13 @@ class Application:
         self.set_details('盤面と接続を確認しています。')
         self.progress.pack(fill='x',pady=(0,10),before=self.body)
         self.progress.start(12)
-        threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types),daemon=True).start()
+        self.worker_thread=threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types),daemon=True)
+        self.worker_thread.start()
 
     def worker(self,source,limit,region,avoid_repeated=False,excluded_types=()):
         try:
             self.messages.put(('done',analyze_file(source,self.output_root,limit,region,
+                                                           on_created=self.session_outputs.add_directory,
                                                            avoid_repeated=avoid_repeated,excluded_types=excluded_types)))
         except Exception as exc:
             self.messages.put(('failed',str(exc)))
@@ -383,7 +397,7 @@ class Application:
         if self.poll_id is not None:
             self.root.after_cancel(self.poll_id)
             self.poll_id = None
-        if self.closed:
+        if self.closed or self.closing:
             return
         try:
             kind,payload = self.messages.get_nowait()
@@ -468,13 +482,13 @@ class Application:
             self.render()
 
     def begin_selection(self):
-        if self.busy:
+        if self.busy or self.closing:
             return
         self.show_input()
         self.canvas.configure(cursor='crosshair' if self.selecting.get() else '')
 
     def clear_region(self):
-        if self.busy:
+        if self.busy or self.closing:
             return
         self.region=None
         self.clear_result()
@@ -489,16 +503,16 @@ class Application:
         return max(0,min(w,x)),max(0,min(h,y))
 
     def selection_start(self,event):
-        if self.busy or not self.selecting.get() or not self.showing_input or self.input_image is None:
+        if self.busy or self.closing or not self.selecting.get() or not self.showing_input or self.input_image is None:
             return
         self.drag_start=self.input_point(event)
 
     def selection_drag(self,event):
-        if self.drag_start is not None and not self.busy:
+        if self.drag_start is not None and not self.busy and not self.closing:
             self.draw_region((*self.drag_start,*self.input_point(event)))
 
     def selection_end(self,event):
-        if self.drag_start is None or self.busy:
+        if self.drag_start is None or self.busy or self.closing:
             return
         import math
         a,b=self.drag_start,self.input_point(event)
@@ -536,7 +550,7 @@ class Application:
         if self.resize_id is not None:
             self.root.after_cancel(self.resize_id)
         self.resize_id = None
-        if self.closed:
+        if self.closed or self.closing:
             return
         self.canvas.delete('all')
         width,height=max(1,self.canvas.winfo_width()),max(1,self.canvas.winfo_height())
@@ -585,11 +599,39 @@ class Application:
         except OSError as exc:
             self.set_details(f'フォルダーを開けませんでした。\n{self.destination}\n\n{exc}')
 
+    def save_settings(self):
+        try:
+            save_cleanup_setting(self.settings_path,self.delete_outputs.get())
+        except OSError as exc:
+            self.set_details('設定を保存できませんでした。今回の選択は有効ですが、次回起動時には引き継がれません。\n'+str(exc))
+
     def close(self):
-        self.closed=True
+        if self.closed or self.closing:
+            return
+        self.closing=True
+        self.save_settings()
         for callback in (self.poll_id,self.resize_id):
             if callback is not None:
                 self.root.after_cancel(callback)
+        self.poll_id=self.resize_id=None
+        for widget in (self.entry,self.browse_button,self.paste_button,self.analyze_button,
+                       self.select_button,self.reset_region_button,self.cleanup_check,
+                       self.repeat_check,self.exclude_check,self.content_list):
+            widget.configure(state='disabled')
+        self.status.configure(text='解析の完了を待って終了します…' if self.worker_thread and self.worker_thread.is_alive() else '終了処理中…')
+        self.finish_close()
+
+    def finish_close(self):
+        if self.worker_thread is not None and self.worker_thread.is_alive():
+            self.close_wait_id=self.root.after(100,self.finish_close)
+            return
+        self.close_wait_id=None
+        if self.delete_outputs.get():
+            failures=self.session_outputs.cleanup()
+            if failures:
+                messagebox.showwarning('一部の出力を削除できませんでした',
+                    '使用中のファイルや安全に削除できないファイルは残しました。\n\n'+'\n'.join(failures[:5]),parent=self.root)
+        self.closed=True
         self.root.destroy()
 
 

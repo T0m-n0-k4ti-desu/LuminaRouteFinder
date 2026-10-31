@@ -4,6 +4,8 @@ Lumina’s Corridorのスクリーンショットから、第1段階→第10段�
 
 ## Windows版ダウンロード（Python不要）
 
+v1.0.1を公開しています。[変更履歴](CHANGELOG.md)も参照してください。
+
 **[LuminaRouteFinder.exe をダウンロード](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases/latest/download/LuminaRouteFinder.exe)**
 
 [リリース一覧](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases) · [SHA-256チェックサム](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases/latest/download/SHA256SUMS.txt)
@@ -58,6 +60,14 @@ Windowsでは `launch_gui.pyw` のダブルクリックでも起動できます�
 5. エラー時は日本語の理由と対応方法、エラー箇所を示す画像に切り替わります。盤面を検出できない場合は入力画像、画像自体を読み込めない場合は理由のみ表示します。
 
 貼り付け直後は入力画像をプレビューします。「解析」は自動実行しません。貼り付け画像は `outputs/gui/clipboard/`（保存先変更時はその下の `clipboard/`）にPNGで保存し、元の解像度を維持します。クリップボードがテキストの場合、Ctrl＋Vはパス欄の通常の貼り付けとして使えます。
+
+### 終了時に今回の出力を削除する
+
+画面下の「終了時に今回の出力（解析結果・貼り付け画像）を削除」は、**初期設定で有効**です。出力を保存したい場合はチェックを外してください。設定はGUI出力先の `gui-settings.json` に保存し、次回起動にも引き継ぎます。
+
+有効な場合、今回の起動で生成した解析結果・候補追加取得の結果・貼り付け画像を、GUI終了時に削除します。解析中に閉じた場合は完了を待ってから削除します。必要な結果は終了前に別の場所へ保存してください。
+
+対象は今回GUIが生成したファイルのみです。入力した元画像、以前の起動で保存した結果、CLIの出力、設定ファイル、出力フォルダーへ追加した別ファイルは対象に含めません。使用中などで削除できないファイルがある場合は通知して残します。
 
 ### 解析範囲を指定する（v0.1.3）
 
@@ -229,6 +239,6 @@ python -m venv .venv-build
 .\.venv-build\Scripts\python.exe tools\build_exe.py
 ```
 
-`dist/LuminaRouteFinder.exe` と `dist/SHA256SUMS.txt` を生成します。ビルド後はexe自体を起動し、GUI・TkDnD・同梱テンプレート・サンプル解析・画像表示を自動確認します。認識用アセットと必要なライブラリをexeに含め、実行時の一時展開先には結果を保存しません。
+`dist/LuminaRouteFinder.exe` と `dist/SHA256SUMS.txt` を生成します。ビルド後はexe自体を起動し、GUI・TkDnD・同梱テンプレート・全画面・切り抜き・貼り付け・範囲指定・倍率タイトルバー検出と画像表示を自動確認します。認識用アセットと必要なライブラリをexeに含め、実行時の一時展開先には結果を保存しません。
 
 配布ファイルはGitのソース履歴に入れず、GitHub Releasesの添付ファイルとして公開します。READMEのダウンロードリンクは最新リリースの `LuminaRouteFinder.exe` を参照します。

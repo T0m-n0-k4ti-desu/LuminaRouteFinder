@@ -248,6 +248,7 @@ class GuiTests(unittest.TestCase):
         self.wait_for_analysis()
         self.assertEqual(self.app.result['status'],'ok')
         self.assertEqual(self.app.result['filters'],{'avoid_repeated':True,'excluded_types':['boss_mutation']})
+        self.assertIn(self.app.destination,self.app.session_outputs.directories)
         self.assertIn('同じコンテンツの連続を禁止',self.app.details.get('1.0','end'))
         self.assertIn('ボス変異戦闘',self.app.details.get('1.0','end'))
         if self.app.result['paths_truncated']:
@@ -274,6 +275,55 @@ class GuiTests(unittest.TestCase):
         self.app.start()
         self.assertFalse(self.app.busy)
         self.assertIn('1つ以上',self.app.details.get('1.0','end'))
+
+    def test_cleanup_checkbox_default_and_disable_persists(self):
+        from lumina_route_finder.session import load_cleanup_setting
+        self.assertTrue(self.app.delete_outputs.get())
+        self.app.delete_outputs.set(False)
+        self.app.save_settings()
+        self.assertFalse(load_cleanup_setting(self.app.settings_path))
+        directory=self.app.output_root/'current'
+        directory.mkdir()
+        (directory/'route.png').write_bytes(b'keep')
+        self.app.session_outputs.add_directory(directory)
+        self.app.close()
+        self.assertTrue((directory/'route.png').exists())
+
+    def test_close_waits_for_worker_and_cleans_even_unpolled_results(self):
+        import threading
+        from unittest.mock import patch
+        with patch('lumina_route_finder.gui.analyze_file') as analyze:
+            entered=threading.Event();release=threading.Event()
+            def delayed(source,root,limit,region,on_created,**options):
+                self.assertEqual(options,{'avoid_repeated':True,'excluded_types':('boss_mutation',)})
+                destination=Path(root)/'unpolled'
+                destination.mkdir(parents=True)
+                on_created(destination)
+                entered.set()
+                release.wait(5)
+                (destination/'route.png').write_bytes(b'result')
+                return {'status':'no_path'},destination,None
+            analyze.side_effect=delayed
+            from lumina_route_finder.contents import CONTENT_NAMES
+            self.app.path.set(str(Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'))
+            self.app.avoid_repeated.set(True)
+            self.app.exclude_enabled.set(True)
+            self.app.options_changed()
+            self.app.content_list.selection_set(list(CONTENT_NAMES).index('boss_mutation'))
+            self.app.start()
+            self.assertTrue(entered.wait(2))
+            self.app.close()
+            self.assertFalse(self.app.closed)
+            self.assertTrue(self.app.closing)
+            self.assertIn('disabled',self.app.repeat_check.state())
+            self.assertIn('disabled',self.app.exclude_check.state())
+            release.set()
+            deadline=time.monotonic()+5
+            while not self.app.closed and time.monotonic()<deadline:
+                self.root.update()
+                time.sleep(.01)
+            self.assertTrue(self.app.closed)
+            self.assertFalse((self.app.output_root/'unpolled').exists())
 
     def test_unexpected_worker_error_recovers_controls(self):
         self.app.busy=True
