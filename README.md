@@ -2,6 +2,22 @@
 
 Lumina’s Corridorのスクリーンショットから、第1段階→第10段階の最大通過アイコン数と経路を求めるPythonスクリプトです。横移動は双方向、上移動・同じアイコンの再訪・線の交差点での乗り換えは禁止します。起点・終点を数え、第1・第10段階でも横移動できます。
 
+## 入力画像と解析結果の例
+
+ゲーム内で回廊ミッションのウィンドウを開き、タイトルバーと全10段階、接続線が見える状態で撮影します。下の段の選択を解除し、カーソルを盤面外に移動してください。背景を含むスクリーンショットをそのまま指定できます。
+
+![入力例：全10段階の盤面と接続線が見えるゲーム画面](docs/images/sample_image.jpg)
+
+このサンプルはリポジトリに同梱しています。GUIにドロップするか、次のように画像を指定して起動できます。起動後に「解析」を押してください。
+
+```powershell
+python -m lumina_route_finder.gui docs\images\sample_image.jpg
+```
+
+解析後は、左側に番号付きの経路画像、右側に最大通過数と通過順を表示します。以下は最大14アイコン・同率8通りの表示例です。画像下の「前へ／次へ」で別の候補に切り替え、「全体表示」「＋」「－」で表示倍率を調整できます。
+
+![GUIの解析結果例：最大14アイコン、同率8通りの候補をページ切り替え](docs/images/pyw_image.jpg)
+
 ## セットアップ
 
 Python 3.10以降を使用してください。リポジトリのルート（`DESIGN.md` とこのファイルがある場所）で実行します。
@@ -36,7 +52,7 @@ Windowsでは `launch_gui.pyw` のダブルクリックでも起動できます�
 
 ```powershell
 # 起動時に画像を指定（解析はボタンで開始）
-python -m lumina_route_finder.gui ..\sample_image\TWCI_2026_11_1_1_2_47.jpg
+python -m lumina_route_finder.gui docs\images\sample_image.jpg
 
 # 保存先の変更
 python -m lumina_route_finder.gui --output-dir D:\LuminaResults
@@ -119,7 +135,7 @@ python -m unittest discover -s tests -v
 - カーソルの一部が盤面外に出る場合、アイコン欠損、切れた画像、複数ウィンドウを拒否。
 - 小規模ランダムグラフ100件で、独立した全経路列挙と最大値・同率経路が一致。
 
-テンプレートの元画像はGitに含めず、切り出した小さなPNGのみ同梱しています。再生成する場合:
+認識テンプレートの元となる検証画像群はGitに含めず、切り出した小さなPNGを同梱しています。README用の入力サンプルとGUI画面は `docs/images/` に格納しています。再生成する場合:
 
 ```powershell
 python tools\build_templates.py ..
