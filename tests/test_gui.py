@@ -86,7 +86,9 @@ class GuiTests(unittest.TestCase):
         self.app.change_zoom(1.25)
         self.app.fit()
         self.app.path.set(str(ERROR))
-        self.assertIsNone(self.app.image)
+        self.assertIsNone(self.app.result)
+        self.assertIsNotNone(self.app.image)
+        self.assertTrue(self.app.showing_input)
         self.app.start()
         self.wait_for_analysis()
         self.assertIn('CURSOR_OCCLUSION',self.app.details.get('1.0','end'))
@@ -141,6 +143,85 @@ class GuiTests(unittest.TestCase):
         self.app.change_page(-1)
         import numpy as np
         self.assertTrue(np.array_equal(first,self.app.image))
+
+    def test_clipboard_paste_and_empty_clipboard(self):
+        from unittest.mock import patch
+        from PIL import Image
+        image=Image.new('RGB',(100,80),(20,40,60))
+        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=image):
+            self.assertEqual(self.app.paste_image(),'break')
+        saved=Path(self.app.path.get())
+        self.assertTrue(saved.is_file())
+        self.assertEqual(self.app.image.shape[:2],(80,100))
+        first=saved
+        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=image):
+            self.app.paste_image()
+        self.assertNotEqual(first,Path(self.app.path.get()))
+        self.assertTrue(first.is_file())
+        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=None):
+            self.app.paste_image()
+        self.assertIn('クリップボードに画像がありません',self.app.details.get('1.0','end'))
+
+    def test_text_paste_does_not_replace_selected_image(self):
+        from unittest.mock import patch
+        self.app.path.set('unchanged.jpg')
+        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=None):
+            self.assertIsNone(self.app.paste_image(SimpleNamespace()))
+        self.assertEqual(self.app.path.get(),'unchanged.jpg')
+
+    @unittest.skipUnless((ROOT/'sample_image/cp_image.jpg').is_file(),'Clipboard example unavailable')
+    def test_clipboard_example_analyses_after_paste(self):
+        from unittest.mock import patch
+        from PIL import Image
+        with Image.open(ROOT/'sample_image/cp_image.jpg') as source:
+            with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=source):
+                self.app.paste_image()
+        self.app.start()
+        self.assertIn('disabled',self.app.paste_button.state())
+        self.wait_for_analysis()
+        self.assertIn('11アイコン',self.app.status.cget('text'))
+        self.assertNotIn('disabled',self.app.paste_button.state())
+
+    def test_file_preview_reverse_drag_and_region_analysis(self):
+        from unittest.mock import patch
+        source=Path(__file__).parent/'fixtures/board_crop.jpg'
+        self.app.path.set(str(source))
+        self.assertTrue(self.app.showing_input)
+        self.assertEqual(self.app.image.shape[:2],(496,249))
+        self.app.selecting.set(True)
+        self.app.begin_selection()
+        self.app.display_scale=1
+        self.app.image_offset=(0,0)
+        with patch.object(self.app.canvas,'canvasx',side_effect=lambda x:x),patch.object(self.app.canvas,'canvasy',side_effect=lambda y:y):
+            self.app.selection_start(SimpleNamespace(x=249,y=496))
+            self.app.selection_drag(SimpleNamespace(x=0,y=0))
+            self.app.selection_end(SimpleNamespace(x=0,y=0))
+        self.assertEqual(self.app.region,(0,0,249,496))
+        self.app.start()
+        self.assertIn('disabled',self.app.select_button.state())
+        self.wait_for_analysis()
+        self.assertEqual(self.app.result['max_count'],18)
+        self.assertEqual(self.app.result['input_region'],[0,0,249,496])
+        self.assertFalse(self.app.showing_input)
+        self.app.show_input()
+        self.assertTrue(self.app.showing_input)
+        self.app.show_result()
+        self.assertFalse(self.app.showing_input)
+        self.app.clear_region()
+        self.assertIsNone(self.app.region)
+        self.assertIsNone(self.app.result)
+        self.assertTrue(self.app.showing_input)
+
+    def test_selection_coordinates_account_for_zoom_offsets_and_scroll(self):
+        from unittest.mock import patch
+        import numpy as np
+        self.app.input_image=np.zeros((500,1000,3),dtype=np.uint8)
+        self.app.display_scale=.5
+        self.app.image_offset=(20,30)
+        with patch.object(self.app.canvas,'canvasx',return_value=220),patch.object(self.app.canvas,'canvasy',return_value=130):
+            self.assertEqual(self.app.input_point(SimpleNamespace(x=1,y=1)),(400,200))
+        with patch.object(self.app.canvas,'canvasx',return_value=-100),patch.object(self.app.canvas,'canvasy',return_value=2000):
+            self.assertEqual(self.app.input_point(SimpleNamespace(x=1,y=1)),(0,500))
 
     def test_unexpected_worker_error_recovers_controls(self):
         self.app.busy=True

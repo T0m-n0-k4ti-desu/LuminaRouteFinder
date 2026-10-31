@@ -22,17 +22,31 @@ def export_solution(result):
     return result
 
 
-def run_image(source, destination, limit=20):
+def run_image(source, destination, limit=20, region=None):
     destination.mkdir(parents=True,exist_ok=True)
     result = {'input': str(source.resolve()), 'config_version': CONFIG_VERSION,
               'coordinate_system': '1-based [row,column]',
               'assumptions': {'revisit':False,'horizontal_in_first_and_last_rows':True}}
     try:
-        board, origin, edges, diagnostics, score = recognize(read_image(source))
+        input_image=read_image(source)
+        offset=(0,0)
+        if region is not None:
+            if len(region)!=4 or any(not isinstance(v,int) for v in region):
+                raise RecognitionError([{'code':'INVALID_REGION','message':'Region must contain four integer coordinates.'}])
+            x1,y1,x2,y2=region
+            h,w=input_image.shape[:2]
+            if not (0<=x1<x2<=w and 0<=y1<y2<=h and x2-x1>=20 and y2-y1>=20):
+                raise RecognitionError([{'code':'INVALID_REGION','message':'Region is empty, too small or outside the input image.'}])
+            input_image=input_image[y1:y2,x1:x2].copy()
+            offset=(x1,y1)
+            result['input_region']=list(region)
+            write_image(destination/'input.png',input_image)
+        board, origin, edges, diagnostics, score = recognize(input_image)
+        origin=(origin[0]+offset[0],origin[1]+offset[1])
         solved = solve([(r,c) for r in range(10) for c in range(5)],edges,limit)
         result.update(export_solution(solved))
         result['board_origin'] = origin
-        result['header_match'] = score
+        result['board_match'] = score
         graph = {'nodes': [[r+1,c+1] for r in range(10) for c in range(5)],
                  'edges': [{'from':[u[0]+1,u[1]+1], 'to':[v[0]+1,v[1]+1]} for u,v in edges],
                  'diagnostics': [{**d,'from':[d['from'][0]+1,d['from'][1]+1],
