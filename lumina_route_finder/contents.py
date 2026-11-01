@@ -3,7 +3,7 @@ from functools import lru_cache
 import cv2
 import numpy as np
 from .paths import ASSETS
-from .errors import RecognitionError, issue
+from .errors import ErrorCode, RecognitionError, issue
 from .domain.geometry import center
 from .domain.catalog import CONTENT_NAMES
 from .image_io import read_image
@@ -35,7 +35,7 @@ def classify_contents(board, *, strict=True):
             score,key = scores[0]
             margin = score-scores[1][0]
             if not np.isfinite(score) or score < .60 or margin < .08:
-                uncertain.append(issue('AMBIGUOUS_CONTENT',
+                uncertain.append(issue(ErrorCode.AMBIGUOUS_CONTENT,
                                        f'Cannot identify mission at row {row+1}, column {col+1}.',
                                        (x-20,y-20,40,40)))
                 labels[row,col] = None

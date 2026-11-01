@@ -1,7 +1,7 @@
 """Unicode-safe OpenCV file input and PNG output."""
 import cv2
 import numpy as np
-from .errors import RecognitionError, issue
+from .errors import ErrorCode, RecognitionError, issue
 
 def read_image(path):
     # imread on Windows does not reliably support Japanese paths.
@@ -10,7 +10,7 @@ def read_image(path):
     except (OSError, ValueError):
         image = None
     if image is None:
-        raise RecognitionError([issue('INPUT_READ_ERROR', 'Cannot read image.')])
+        raise RecognitionError([issue(ErrorCode.INPUT_READ_ERROR, 'Cannot read image.')])
     return image
 
 def write_image(path, image):

@@ -6,7 +6,7 @@ from functools import lru_cache
 import cv2
 import numpy as np
 from .paths import ASSETS
-from .errors import RecognitionError, issue
+from .errors import ErrorCode, RecognitionError, issue
 from .image_io import read_image
 from .domain.geometry import center
 from .board_location import (locate, locate_details, locate_native, locate_scaled_header, visible_icon_count)
@@ -70,11 +70,11 @@ def recognize(image):
         diagnostics.append({'from':u,'to':v,'dark_pixels':score,'area':area,'state':state})
         if ambiguous:
             x1,y1=center(u); x2,y2=center(v)
-            uncertain.append(issue('AMBIGUOUS_CONNECTION', f'Uncertain connection {u} -> {v}.', (min(x1,x2)-3,min(y1,y2)-3,abs(x2-x1)+6,abs(y2-y1)+6)))
+            uncertain.append(issue(ErrorCode.AMBIGUOUS_CONNECTION, f'Uncertain connection {u} -> {v}.', (min(x1,x2)-3,min(y1,y2)-3,abs(x2-x1)+6,abs(y2-y1)+6)))
         if present:
             edges.append((u,v))
     if uncertain:
         raise RecognitionError(uncertain,board,origin)
     if any(not any(u[0] == r and v[0] == r+1 for u,v in edges) for r in range(9)):
-        raise RecognitionError([issue('AMBIGUOUS_CONNECTION','Missing evidence between rows; complete board cannot be confirmed.')],board,origin)
+        raise RecognitionError([issue(ErrorCode.AMBIGUOUS_CONNECTION,'Missing evidence between rows; complete board cannot be confirmed.')],board,origin)
     return board, origin, edges, diagnostics, header_score

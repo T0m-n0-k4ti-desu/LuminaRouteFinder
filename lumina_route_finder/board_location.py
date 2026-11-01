@@ -2,7 +2,7 @@
 import cv2
 import numpy as np
 from .paths import ASSETS
-from .errors import RecognitionError, issue
+from .errors import ErrorCode, RecognitionError, issue
 from .image_io import read_image
 from .domain.geometry import center
 from .board_validation import validate
@@ -12,7 +12,7 @@ def locate_native(image):
     template = read_image(ASSETS / 'window.png')
     h, w = template.shape[:2]
     if image.shape[0] < h or image.shape[1] < w:
-        raise RecognitionError([issue('BOARD_NOT_FOUND', 'Window header not found.')])
+        raise RecognitionError([issue(ErrorCode.BOARD_NOT_FOUND, 'Window header not found.')])
     scores = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
     matches=[]
     while len(matches)<12:
@@ -29,9 +29,9 @@ def locate_native(image):
             continue
         matches.append((board,(ox,oy),float(score)))
     if len(matches)>1:
-        raise RecognitionError([issue('MULTIPLE_BOARDS','Multiple complete visible boards found.')])
+        raise RecognitionError([issue(ErrorCode.MULTIPLE_BOARDS,'Multiple complete visible boards found.')])
     if not matches:
-        raise RecognitionError([issue('BOARD_NOT_FOUND','No complete visible board under a matching header.')])
+        raise RecognitionError([issue(ErrorCode.BOARD_NOT_FOUND,'No complete visible board under a matching header.')])
     return matches[0]
 
 
@@ -94,9 +94,9 @@ def locate_scaled_header(image):
                 continue
             matches.append((board, origin, float(score), (scale, scale)))
     if len(matches) > 1:
-        raise RecognitionError([issue('MULTIPLE_BOARDS', 'Multiple complete scaled windows found.')])
+        raise RecognitionError([issue(ErrorCode.MULTIPLE_BOARDS, 'Multiple complete scaled windows found.')])
     if not matches:
-        raise RecognitionError([issue('BOARD_NOT_FOUND', 'Window header not found at 0.5–3x scale.')])
+        raise RecognitionError([issue(ErrorCode.BOARD_NOT_FOUND, 'Window header not found at 0.5–3x scale.')])
     return matches[0]
 
 
@@ -122,11 +122,11 @@ def locate_details(image):
         if score >= .99:
             return native
     except RecognitionError as exc:
-        if exc.issues[0]['code']=='MULTIPLE_BOARDS':
+        if exc.issues[0]['code'] == ErrorCode.MULTIPLE_BOARDS:
             raise
     grids=find_grids(image)
     if len(grids)>1:
-        raise RecognitionError([issue('MULTIPLE_BOARDS','Multiple complete icon grids found.')])
+        raise RecognitionError([issue(ErrorCode.MULTIPLE_BOARDS,'Multiple complete icon grids found.')])
     if not grids and native is not None:
         if not validate(native[0]):
             return native

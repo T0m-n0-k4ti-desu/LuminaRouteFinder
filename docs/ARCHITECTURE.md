@@ -41,6 +41,8 @@ flowchart TD
 | 画面配置・ウィジェット・イベント接続 | `lumina_route_finder/ui/view.py` |
 | 拡大・スクロール・ドラッグ・範囲選択の座標変換 | `lumina_route_finder/ui/preview.py` |
 | 表示文・エラー文・通過順 | `lumina_route_finder/ui/presentation.py` |
+| エラーコード・共通例外・失敗結果への正規化 | `lumina_route_finder/errors.py` |
+| 利用者向けエラー文と重複排除 | `lumina_route_finder/error_messages.py` |
 | GUI入力・ワーカー・候補切替・終了待機 | `lumina_route_finder/ui/controller.py` |
 | 設定ファイルの検証・保存・移行 | `lumina_route_finder/settings.py` |
 | 今回の出力登録・終了時削除 | `lumina_route_finder/session.py` |
@@ -70,3 +72,13 @@ flowchart TD
 既存のGUI・CLI・認識・探索・設定・配布テストを引き続き実行します。コードの移動だけで画面の文言、探索条件、設定形式、出力ファイルを変更しないようにします。今回の分割では、同梱画像による通常解析・条件付き解析・範囲指定のJSON／PNG成果物が分割前とバイト単位で一致し、不正画像のエラー結果も一致することを確認しました。
 
 複数の機能を同時に変更する際は、上の表で主な変更先を分けてください。新しい画像操作でViewのレイアウトや探索処理まで変更する、といった責務の混在を避けます。
+
+## エラーの扱い
+
+`errors.py` の `ErrorCode` がコードを定義し、`issue()` が既存の `code`／`message`／任意の `board_box` 形式を作ります。Enumを渡してもJSONのコードは従来と同じ文字列です。既知の業務エラーは `ApplicationError` で表現し、画像認識の公開例外 `RecognitionError` はそのサブクラスとして維持します。画像や原点などの診断用情報も保持します。
+
+`error_messages.py` は利用者向け日本語メッセージを一元管理します。GUIの結果表示、入力検証、クリップボード、設定、出力の案内に同じ整形関数を使います。診断用の詳細は `message` に残し、未知のコードは診断文へフォールバックします。メッセージの翻訳や重複排除は、認識処理やTkウィジェットに置きません。
+
+CLIとGUIワーカーの境界では `failure_issues()`／`error_result()` で例外を共通形式にします。既知の `ApplicationError` のコードは保持し、出力操作でのOSエラーは `OUTPUT_WRITE_ERROR`、予期しない障害は `ANALYSIS_FAILED` に分けます。GUIは日本語文へ整形し、CLIは従来の機械可読コードを表示します。保存そのものが失敗した場合、結果ファイルを保存できたことにはしません。
+
+探索の `partial`／`no_path` はエラー例外に変換しません。純粋な探索APIの不正な引数など、プログラマー向けの検証は引き続き `ValueError` です。予期しない例外を業務エラーに偽装して握りつぶす用途には使いません。

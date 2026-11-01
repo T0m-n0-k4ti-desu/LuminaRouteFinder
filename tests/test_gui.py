@@ -408,9 +408,23 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.app.closed)
         self.assertIsNone(self.app.preview.resize_id)
 
+    def test_expected_worker_error_preserves_its_code_and_message(self):
+        from unittest.mock import patch
+        from lumina_route_finder.errors import RecognitionError, ErrorCode, issue
+        self.app.busy=True
+        with patch('lumina_route_finder.ui.controller.analyze_file',
+                   side_effect=RecognitionError([issue(ErrorCode.BOARD_NOT_FOUND,'header missing')])):
+            self.app.worker(Path('source.jpg'),20,None)
+        self.app.poll()
+        details=self.app.view.details.get('1.0','end')
+        self.assertIn('盤面を検出できません',details)
+        self.assertIn('header missing',details)
+        self.assertFalse(self.app.busy)
+        self.assertNotIn('disabled',self.app.view.analyze_button.state())
+
     def test_unexpected_worker_error_recovers_controls(self):
         self.app.busy=True
-        self.app.messages.put(('failed','output is read-only'))
+        self.app.messages.put(('failed',[{'code':'OUTPUT_WRITE_ERROR','message':'output is read-only'}]))
         self.app.poll()
         self.assertFalse(self.app.busy)
         self.assertIn('output is read-only',self.app.view.details.get('1.0','end'))

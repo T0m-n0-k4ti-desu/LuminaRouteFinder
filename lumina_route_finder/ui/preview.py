@@ -6,6 +6,8 @@ nothing about solving, output files, settings or worker threads.
 import base64
 import tkinter as tk
 import cv2
+from ..errors import ErrorCode
+from ..error_messages import error_message
 
 
 class ImagePreview:
@@ -97,7 +99,7 @@ class ImagePreview:
         box=(math.floor(min(a[0],b[0])),math.floor(min(a[1],b[1])),
              math.ceil(max(a[0],b[0])),math.ceil(max(a[1],b[1])))
         if box[2]-box[0]<20 or box[3]-box[1]<20:
-            self.on_notice('指定範囲が小さすぎます。全50個のアイコンと接続線を含むように囲んでください。')
+            self.on_notice(error_message(ErrorCode.REGION_TOO_SMALL))
             self.render()
             return
         self.region=box

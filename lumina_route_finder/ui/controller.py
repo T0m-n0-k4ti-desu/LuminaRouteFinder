@@ -10,7 +10,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinterdnd2 import COPY, TkinterDnD
 from ..analysis import analyze_file
-from ..errors import RecognitionError
+from ..errors import ErrorCode, RecognitionError, failure_issues
+from ..error_messages import error_message, format_issues
 from ..image_io import read_image
 from ..render import render_route
 from ..domain.catalog import CONTENT_NAMES
@@ -40,7 +41,7 @@ class Application:
             migrate_cleanup_setting(self.settings_path,legacy)
             self.session_outputs.prune_empty()
         except OSError as exc:
-            self.settings_notice='旧設定を移行できませんでした。保存先の権限を確認してください。\n'+str(exc)
+            self.settings_notice=error_message(ErrorCode.SETTINGS_MIGRATION_ERROR, str(exc))
         self.delete_outputs=tk.BooleanVar(master=root,value=initial_setting if self.settings_notice else load_cleanup_setting(self.settings_path))
         self.saved_options=initial_options if self.settings_notice else load_settings(self.settings_path)
         self.initial_path_limit=self.saved_options['initial_path_limit']
@@ -123,17 +124,15 @@ class Application:
             image=get_clipboard_image()
             if image is None:
                 if event is None:
-                    self.show_error('クリップボードに画像がありません。Win＋Shift＋Sで対象ウィンドウをコピーしてから貼り付けてください。')
+                    self.show_error(error_message(ErrorCode.CLIPBOARD_EMPTY))
                 return None
             self.load_pasted_image(image)
             return 'break'
         except NotImplementedError as exc:
-            self.show_error('この環境ではクリップボード画像を取得できません。Linux / WSLでは、\n'
-                            'sudo apt install wl-clipboard xclip\n'
-                            'で必要なツールを導入してください。画像をファイルに保存し、参照から開くこともできます。\n\n'+str(exc))
+            self.show_error(error_message(ErrorCode.CLIPBOARD_UNAVAILABLE, str(exc)))
             return 'break'
         except (ImportError,OSError,ValueError) as exc:
-            self.show_error('クリップボード画像を読み込めませんでした。コピーし直してください。\n\n'+str(exc))
+            self.show_error(error_message(ErrorCode.CLIPBOARD_READ_ERROR, str(exc)))
             return 'break'
 
     def load_pasted_image(self,image):
@@ -155,7 +154,7 @@ class Application:
         except tk.TclError:
             paths = ()
         if len(paths) != 1:
-            self.show_error('画像を1枚だけドロップしてください。')
+            self.show_error(error_message(ErrorCode.INVALID_FILE_COUNT))
             return 'refuse_drop'
         self.view.path.set(paths[0])
         return COPY
@@ -184,12 +183,12 @@ class Application:
             value = value[1:-1]
         source = Path(value).expanduser()
         if not value or not source.is_file():
-            self.show_error('存在する画像ファイルを指定してください。フォルダーは指定できません。')
+            self.show_error(error_message(ErrorCode.INPUT_NOT_FOUND))
             return
         avoid_repeated = self.view.avoid_repeated.get()
         excluded_types = tuple(list(CONTENT_NAMES)[i] for i in self.view.content_list.curselection()) if self.view.exclude_enabled.get() else ()
         if self.view.exclude_enabled.get() and not excluded_types:
-            self.show_error('除外するコンテンツを1つ以上選択するか、「指定コンテンツを除外」のチェックを外してください。')
+            self.show_error(error_message(ErrorCode.MISSING_EXCLUSION_TARGET))
             return
         if limit is None:limit=self.initial_path_limit
         priority=FALLBACK_CHOICES[self.view.fallback_priority.get()]
@@ -225,7 +224,7 @@ class Application:
                                                            on_created=self.session_outputs.add_directory,
                                                            avoid_repeated=avoid_repeated,excluded_types=excluded_types,fallback_priority=fallback_priority)))
         except Exception as exc:
-            self.messages.put(('failed',str(exc)))
+            self.messages.put(('failed',failure_issues(exc)))
 
     def poll(self):
         if self.poll_id is not None:
@@ -248,7 +247,7 @@ class Application:
             self.view.exclude_check.configure(state='normal')
             self.view.content_list.configure(state='normal' if self.view.exclude_enabled.get() else 'disabled')
             if kind == 'failed':
-                self.show_error('解析処理を完了できませんでした。\n\n'+payload)
+                self.show_error(format_issues(payload, include_detail=True))
             else:
                 result,self.destination,self.image = payload
                 self.result = result
@@ -341,7 +340,7 @@ class Application:
             else:
                 subprocess.Popen(['open' if sys.platform=='darwin' else 'xdg-open',path])
         except OSError as exc:
-            self.set_details(f'フォルダーを開けませんでした。\n{self.destination}\n\n{exc}')
+            self.set_details(error_message(ErrorCode.OUTPUT_OPEN_ERROR, f'{self.destination}\n\n{exc}'))
 
     def save_settings(self):
         try:
@@ -353,7 +352,7 @@ class Application:
                 'fallback_priority':FALLBACK_CHOICES[self.view.fallback_priority.get()],
                 'initial_path_limit':self.initial_path_limit})
         except OSError as exc:
-            self.set_details('設定を保存できませんでした。今回の選択は有効ですが、次回起動時には引き継がれません。\n'+str(exc))
+            self.set_details(error_message(ErrorCode.SETTINGS_SAVE_ERROR, str(exc)))
 
     def close(self):
         if self.closed or self.closing:
@@ -381,7 +380,7 @@ class Application:
             failures=self.session_outputs.cleanup()
             if failures:
                 messagebox.showwarning('一部の出力を削除できませんでした',
-                    '使用中のファイルや安全に削除できないファイルは残しました。\n\n'+'\n'.join(failures[:5]),parent=self.root)
+                    error_message(ErrorCode.OUTPUT_CLEANUP_ERROR, '\n'.join(failures[:5])),parent=self.root)
         self.closed=True
         self.root.destroy()
 

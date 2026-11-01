@@ -1,8 +1,11 @@
 """Command-line arguments and batch dispatch."""
 import argparse
 import json
+import sys
 from pathlib import Path
 from .analysis import run_image
+from .errors import error_result
+from .error_messages import format_issues
 from .domain.solver import solve
 from .domain.geometry import export_solution
 
@@ -50,7 +53,11 @@ def main(argv=None):
             while target.with_name(target.name+f'.{suffix}').exists():
                 suffix+=1
             target=target.with_name(target.name+f'.{suffix}')
-        result=run_image(source,target,args.max_paths,fallback_priority=None if args.fallback_priority=='none' else args.fallback_priority)
+        try:
+            result=run_image(source,target,args.max_paths,fallback_priority=None if args.fallback_priority=='none' else args.fallback_priority)
+        except Exception as exc:
+            result=error_result(exc)
+            print(format_issues(result['errors'],include_code=True,include_detail=True),file=sys.stderr)
         status=result['status']
         details=result.get('max_count') if status in ('ok','partial') else [x['code'] for x in result.get('errors',[])]
         print(f'{source.name}: {status} {details}',flush=True)

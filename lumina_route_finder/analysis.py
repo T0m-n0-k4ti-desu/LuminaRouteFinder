@@ -6,7 +6,7 @@ no dependency on argument parsing or Tk, so both entry points use the same flow.
 from datetime import datetime
 from pathlib import Path
 import tempfile
-from .errors import RecognitionError
+from .errors import ApplicationError, ErrorCode, RecognitionError, issue, error_result
 from .image_io import read_image, write_image
 from .recognize import CONFIG_VERSION, recognize
 from .domain.solver import solve
@@ -24,11 +24,11 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
         offset=(0,0)
         if region is not None:
             if len(region)!=4 or any(not isinstance(v,int) for v in region):
-                raise RecognitionError([{'code':'INVALID_REGION','message':'Region must contain four integer coordinates.'}])
+                raise RecognitionError([issue(ErrorCode.INVALID_REGION, 'Region must contain four integer coordinates.')])
             x1,y1,x2,y2=region
             h,w=input_image.shape[:2]
             if not (0<=x1<x2<=w and 0<=y1<y2<=h and x2-x1>=20 and y2-y1>=20):
-                raise RecognitionError([{'code':'INVALID_REGION','message':'Region is empty, too small or outside the input image.'}])
+                raise RecognitionError([issue(ErrorCode.INVALID_REGION, 'Region is empty, too small or outside the input image.')])
             input_image=input_image[y1:y2,x1:x2].copy()
             offset=(x1,y1)
             result['input_region']=list(region)
@@ -38,7 +38,7 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
         from .contents import CONTENT_NAMES, classify_contents
         excluded_types = tuple(excluded_types)
         if any(key not in CONTENT_NAMES for key in excluded_types):
-            raise ValueError('Unknown excluded content type')
+            raise ApplicationError([issue(ErrorCode.INVALID_CONTENT_TYPE, 'Unknown excluded content type')])
         filtered = bool(avoid_repeated or excluded_types)
         labels, content_diagnostics = classify_contents(board, strict=filtered)
         result['content_types'] = [[labels[r,c] for c in range(5)] for r in range(10)]
@@ -51,8 +51,8 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
         result['board_origin'] = origin
         result['board_match'] = score
         write_analysis_artifacts(destination, board, edges, diagnostics, solved)
-    except RecognitionError as exc:
-        result.update(status='error', errors=exc.issues)
+    except ApplicationError as exc:
+        result.update(error_result(exc))
         write_error_artifact(destination, exc)
     write_result(destination, result)
     return result
