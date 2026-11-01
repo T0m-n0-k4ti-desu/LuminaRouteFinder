@@ -3,7 +3,7 @@ import cv2
 from .domain.geometry import center
 
 
-def render_route(board, path):
+def render_route(board, path, selected=None):
     """Render a zero-based node path without modifying the source board."""
     display = cv2.resize(board, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
     for u, v in zip(path, path[1:]):
@@ -14,4 +14,7 @@ def render_route(board, path):
         x,y = center(node)
         cv2.circle(display, (2*x,2*y), 10, (255,255,255), -1)
         cv2.putText(display, str(i), (2*x-9,2*y+5), cv2.FONT_HERSHEY_SIMPLEX, .4, (0,0,0), 1, cv2.LINE_AA)
+    if selected is not None and 0<=selected<len(path):
+        x,y=center(path[selected])
+        cv2.circle(display,(2*x,2*y),17,(0,180,255),3,cv2.LINE_AA)
     return display
