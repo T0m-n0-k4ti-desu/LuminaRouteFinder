@@ -124,3 +124,7 @@ python tools/publish_release.py v1.0.2 --dry-run
 手動公開ではGitHub CLIをインストールし、書き込み可能なアカウントで `gh auth login` を行い、タグをリモートへpushした後に `--dry-run` を外します。Actionsでは標準の `GITHUB_TOKEN` と `contents: write` 権限を使用します。
 
 既存の下書きに同内容の添付があれば不足分だけ追加します。異なる添付や公開済みリリースは上書きせず停止します。再ビルドで内容が異なる場合は下書きを確認し、新しいタグでリリースしてください。
+
+## 共有メンテナンスSKILL
+
+`.agents/skills/` に [README更新](../.agents/skills/lumina-readme/SKILL.md)、[Windowsビルド](../.agents/skills/lumina-build/SKILL.md)、[リリース公開](../.agents/skills/lumina-release/SKILL.md) の手順を同梱しています。別ユーザーもリポジトリを取得し、必要なSKILL.mdをエージェントへ指定して利用できます。自分のWindows・Python環境と、公開先への認証を使用してください。
