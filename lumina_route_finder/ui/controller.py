@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinterdnd2 import COPY, TkinterDnD
 from ..analysis import analyze_file
+from ..analysis_session import AnalysisCache, AnalysisCancelled
 from ..errors import ErrorCode, RecognitionError, failure_issues
 from ..error_messages import error_message, format_issues
 from ..image_io import read_image
@@ -45,6 +46,8 @@ class Application:
         self.delete_outputs=tk.BooleanVar(master=root,value=initial_setting if self.settings_notice else load_cleanup_setting(self.settings_path))
         self.saved_options=initial_options if self.settings_notice else load_settings(self.settings_path)
         self.initial_path_limit=self.saved_options['initial_path_limit']
+        self.analysis_cache=AnalysisCache()
+        self.cancel_event=threading.Event()
         self.worker_thread=None
         self.closing=False
         self.close_wait_id=None
@@ -95,6 +98,7 @@ class Application:
     def path_changed(self,*_):
         if self.busy or self.closing:
             return
+        self.analysis_cache.clear()
         self.preview.input_image=None
         self.region=None
         self.view.selecting.set(False)
@@ -200,6 +204,8 @@ class Application:
         self.show_input()
         self.page_limit = limit
         self.requested_page = selected_page
+        self.cancel_event.clear()
+        self.view.cancel_button.configure(state='normal')
         self.busy = True
         self.view.entry.configure(state='disabled')
         self.view.browse_button.configure(state='disabled')
@@ -222,9 +228,18 @@ class Application:
         try:
             self.messages.put(('done',analyze_file(source,self.output_root,limit,region,
                                                            on_created=self.session_outputs.add_directory,
-                                                           avoid_repeated=avoid_repeated,excluded_types=excluded_types,fallback_priority=fallback_priority)))
+                                                           avoid_repeated=avoid_repeated,excluded_types=excluded_types,fallback_priority=fallback_priority,cache=self.analysis_cache,cancel=self.cancel_event,
+                                                           progress=lambda stage:self.messages.put(('progress',stage)))))
+        except AnalysisCancelled:
+            self.messages.put(('cancelled',None))
         except Exception as exc:
             self.messages.put(('failed',failure_issues(exc)))
+
+    def cancel_analysis(self):
+        if self.busy:
+            self.cancel_event.set()
+            self.view.cancel_button.configure(state='disabled')
+            self.view.status.configure(text='停止待ち…（現在の処理区切りで停止します）')
 
     def poll(self):
         if self.poll_id is not None:
@@ -237,6 +252,11 @@ class Application:
         except queue.Empty:
             pass
         else:
+            if kind=='progress':
+                if not self.cancel_event.is_set():self.view.status.configure(text=payload+'…')
+                self.poll_id=self.root.after(20,self.poll)
+                return
+            self.view.cancel_button.configure(state='disabled')
             self.busy = False
             self.view.progress.stop()
             self.view.progress.pack_forget()
@@ -246,7 +266,10 @@ class Application:
             self.view.repeat_check.configure(state='normal')
             self.view.exclude_check.configure(state='normal')
             self.view.content_list.configure(state='normal' if self.view.exclude_enabled.get() else 'disabled')
-            if kind == 'failed':
+            if kind=='cancelled':
+                self.view.status.configure(text='解析をキャンセルしました',foreground='#26374a')
+                self.set_details('設定や範囲を変更して再度解析できます。')
+            elif kind == 'failed':
                 self.show_error(format_issues(payload, include_detail=True))
             else:
                 result,self.destination,self.image = payload
@@ -325,6 +348,7 @@ class Application:
         if self.busy or self.closing:
             return
         self.region=None
+        self.analysis_cache.clear()
         self.clear_result()
         self.view.region_text.set('自動検出（画像全体）')
         self.view.status.configure(text='解析の準備ができました',foreground='#26374a')
@@ -358,6 +382,7 @@ class Application:
         if self.closed or self.closing:
             return
         self.closing=True
+        self.cancel_event.set()
         self.view.progress.stop()
         self.save_settings()
         for callback in (self.poll_id,self.preview.resize_id):
@@ -412,6 +437,7 @@ class Application:
         self.preview.render()
 
     def apply_region(self, box):
+        self.analysis_cache.clear()
         self.region = box
         self.clear_result()
         self.show_input()
