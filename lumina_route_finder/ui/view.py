@@ -32,6 +32,8 @@ class ApplicationView:
         self.paste_button.pack(side='left',padx=(0,8))
         self.analyze_button = ttk.Button(inputs,text='解析',command=controller.start)
         self.analyze_button.pack(side='left')
+        self.cancel_button=ttk.Button(inputs,text='中止',command=controller.cancel_analysis,state='disabled')
+        self.cancel_button.pack(side='left',padx=(6,0))
         self.drop_label = tk.Label(main,text='画像をドロップ、またはCtrl＋Vで貼り付けできます（1枚）',
                                    bg='#eef3f8',fg='#42556b',pady=12,highlightthickness=1,highlightbackground='#b8c9da')
         self.drop_label.pack(fill='x',pady=(10,12))

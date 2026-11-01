@@ -2,7 +2,7 @@
 from collections import defaultdict
 
 
-def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False, fallback_priority=None):
+def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False, fallback_priority=None, cancel=None):
     """Return optimal paths; horizontal travel is bidirectional, upward travel forbidden.
 
     Keep exact optimal path count, but materialize at most ``limit`` examples.
@@ -50,6 +50,9 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
     for row in rows:
         ends = {}
         def visit(path, previous):
+            if cancel is not None and cancel.is_set():
+                from .jobs import AnalysisCancelled
+                raise AnalysisCancelled()
             n = path[-1]
             length = previous[0] + len(path)
             examples = [prefix + path for prefix in previous[2]][:limit]
