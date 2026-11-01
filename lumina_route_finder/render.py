@@ -1,6 +1,6 @@
-﻿"""Shared route drawing for CLI and GUI."""
+"""Shared route drawing for CLI and GUI."""
 import cv2
-from .recognize import center
+from .domain.geometry import center
 
 
 def render_route(board, path):

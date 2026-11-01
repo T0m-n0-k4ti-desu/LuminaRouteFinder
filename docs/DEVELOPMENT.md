@@ -148,3 +148,7 @@ python tools/publish_release.py v1.0.2 --dry-run
 ## 共有メンテナンスSKILL
 
 `.agents/skills/` に [README更新](../.agents/skills/lumina-readme/SKILL.md)、[Windowsビルド](../.agents/skills/lumina-build/SKILL.md)、[リリース公開](../.agents/skills/lumina-release/SKILL.md) の手順を同梱しています。別ユーザーもリポジトリを取得し、必要なSKILL.mdをエージェントへ指定して利用できます。自分のWindows・Python環境と、公開先への認証を使用してください。
+
+## コード構成
+
+責務ごとの変更先、GUIのView／Controller／Previewの分担、依存方向、既存APIの互換窓口は [コード構成と責務](ARCHITECTURE.md) を参照してください。画面構築・画像操作・表示文・解析・設定・探索を別モジュールに分け、共通の解析処理をCLIとGUIから呼び出します。

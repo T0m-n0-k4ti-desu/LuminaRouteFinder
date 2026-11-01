@@ -2,22 +2,12 @@
 from functools import lru_cache
 import cv2
 import numpy as np
-from .recognize import ASSETS, RecognitionError, center, issue, read_image
+from .paths import ASSETS
+from .errors import ErrorCode, RecognitionError, issue
+from .domain.geometry import center
+from .domain.catalog import CONTENT_NAMES
+from .image_io import read_image
 
-CONTENT_NAMES = {
-    'element_tiles': '属性タイル渡り',
-    'element_survival': '属性地形生存',
-    'escape_room': 'エスケープルーム',
-    'scales_of_sin': '罪悪の秤',
-    'element_combat': '属性相性戦闘',
-    'role_combat': '役割分担戦闘',
-    'boss_mutation': 'ボス変異戦闘',
-    'debuff_dispersion': 'デバフ分散',
-    'two_faced_monarch': '両面の君主',
-    'overheat_control': 'オーバーヒートコントロール',
-    'ancient_weapon_core': '古代兵器の核破壊',
-    'wheel_of_fate': '運命の輪',
-}
 
 
 @lru_cache(maxsize=1)
@@ -45,7 +35,7 @@ def classify_contents(board, *, strict=True):
             score,key = scores[0]
             margin = score-scores[1][0]
             if not np.isfinite(score) or score < .60 or margin < .08:
-                uncertain.append(issue('AMBIGUOUS_CONTENT',
+                uncertain.append(issue(ErrorCode.AMBIGUOUS_CONTENT,
                                        f'Cannot identify mission at row {row+1}, column {col+1}.',
                                        (x-20,y-20,40,40)))
                 labels[row,col] = None
