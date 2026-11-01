@@ -66,6 +66,7 @@ class Application:
         self.destination = None
         self.poll_id = None
         self.view = ApplicationView(self, root)
+        self.view.refresh_summary(self)
         self.preview = ImagePreview(self.view.canvas, self.view.selecting, self.view.scale_text,
                                     can_interact=lambda: not self.busy and not self.closing,
                                     is_closed=lambda: self.closed or self.closing,
@@ -435,6 +436,7 @@ class Application:
             self.set_details(error_message(ErrorCode.OUTPUT_OPEN_ERROR, f'{self.destination}\n\n{exc}'))
 
     def save_settings(self):
+        self.view.refresh_summary(self)
         try:
             write_gui_settings(self.settings_path,{
                 'delete_outputs_on_exit':self.delete_outputs.get(),
