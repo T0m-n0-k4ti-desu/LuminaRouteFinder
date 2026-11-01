@@ -7,3 +7,5 @@ outputs/
 build/
 dist/
 .venv-build/
+
+/gui-settings.json

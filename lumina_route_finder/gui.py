@@ -19,7 +19,7 @@ from .__main__ import run_image
 from .recognize import RecognitionError, read_image
 from .render import render_route
 from .contents import CONTENT_NAMES
-from .session import SessionOutputs,load_cleanup_setting,save_cleanup_setting
+from .session import SessionOutputs,load_cleanup_setting,save_cleanup_setting,default_settings_path,migrate_cleanup_setting,read_cleanup_setting
 
 ERROR_MESSAGES = {
     'AMBIGUOUS_CONTENT': 'コンテンツの種類を確定できません。画像の画質や遮蔽を確認するか、除外オプションをオフにしてください。',
@@ -93,12 +93,23 @@ def analyze_file(source, output_root, limit=20, region=None, on_created=None, *,
 
 
 class Application:
-    def __init__(self, root, output_root=Path('outputs/gui')):
+    def __init__(self, root, output_root=Path('outputs/gui'), settings_path=None):
         self.root = root
         self.output_root = Path(output_root).resolve()
-        self.session_outputs=SessionOutputs(self.output_root)
-        self.settings_path=self.output_root/'gui-settings.json'
-        self.delete_outputs=tk.BooleanVar(master=root,value=load_cleanup_setting(self.settings_path))
+        default_output=(Path.cwd()/'outputs/gui').resolve()
+        self.session_outputs=SessionOutputs(self.output_root,self.output_root.parent if self.output_root==default_output else None)
+        self.settings_path=Path(settings_path).resolve() if settings_path is not None else default_settings_path()
+        legacy=self.output_root/'gui-settings.json'
+        self.settings_notice=None
+        initial_setting=read_cleanup_setting(self.settings_path)
+        if initial_setting is None:
+            initial_setting=load_cleanup_setting(legacy)
+        try:
+            migrate_cleanup_setting(self.settings_path,legacy)
+            self.session_outputs.prune_empty()
+        except OSError as exc:
+            self.settings_notice='旧設定を移行できませんでした。保存先の権限を確認してください。\n'+str(exc)
+        self.delete_outputs=tk.BooleanVar(master=root,value=initial_setting if self.settings_notice else load_cleanup_setting(self.settings_path))
         self.worker_thread=None
         self.closing=False
         self.close_wait_id=None
@@ -239,6 +250,8 @@ class Application:
         self.root.bind('<Control-v>',self.paste_image)
         self.root.bind('<Control-V>',self.paste_image)
         self.set_details('パスを入力するか、画像を選択・ドロップして「解析」を押してください。\n\n対応形式: JPG / PNG / BMP\n\n結果の番号はアイコンの通過順です。')
+        if self.settings_notice:
+            self.set_details(self.settings_notice)
         self.render()
         self.poll_id = root.after(80,self.poll)
 

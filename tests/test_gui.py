@@ -44,7 +44,7 @@ class GuiTests(unittest.TestCase):
             self.skipTest(f'Tk display unavailable: {exc}')
         self.root.withdraw()
         self.tmp=tempfile.TemporaryDirectory(prefix='lumina_gui_')
-        self.app=Application(self.root,Path(self.tmp.name)/'results')
+        self.app=Application(self.root,Path(self.tmp.name)/'results',settings_path=Path(self.tmp.name)/'gui-settings.json')
         self.root.update()
 
     def tearDown(self):
@@ -345,7 +345,7 @@ class GuiTests(unittest.TestCase):
         self.app.save_settings()
         self.assertFalse(load_cleanup_setting(self.app.settings_path))
         directory=self.app.output_root/'current'
-        directory.mkdir()
+        directory.mkdir(parents=True)
         (directory/'route.png').write_bytes(b'keep')
         self.app.session_outputs.add_directory(directory)
         self.app.close()

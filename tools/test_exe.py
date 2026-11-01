@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 from pathlib import Path
 import subprocess
+import tempfile
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,6 +46,31 @@ def test_executable():
         if name=='region' and result['input_region'] != [715,327,975,827]:
             raise RuntimeError('Frozen GUI did not use the selected region')
         print(f'Frozen GUI: {name}, TkDnD and preview verified ({expected} icons).',flush=True)
+
+
+def test_portable_zip(archive):
+    with tempfile.TemporaryDirectory(prefix='lumina_portable_') as temp:
+        folder=Path(temp)
+        with zipfile.ZipFile(archive) as bundle:
+            if set(bundle.namelist())!={'LuminaRouteFinder.exe','gui-settings.json'}:
+                raise RuntimeError('Portable ZIP must contain exactly the executable and settings')
+            bundle.extractall(folder)
+        expected_settings=folder/'gui-settings.json'
+        startup=subprocess.STARTUPINFO()
+        startup.dwFlags|=subprocess.STARTF_USESHOWWINDOW
+        startup.wShowWindow=subprocess.SW_HIDE
+        # Keep reports outside the portable folder, then verify the entire
+        # extracted folder returns to the original two-file layout.
+        report=ROOT/'outputs/exe-smoke/portable_report.json'
+        subprocess.run([str(folder/'LuminaRouteFinder.exe'),'--smoke-test',
+                        str(ROOT/'docs/images/sample_image.jpg'),'--report',str(report),'--portable-test'],
+                       cwd=ROOT,check=True,timeout=90,startupinfo=startup)
+        result=json.loads(report.read_text(encoding='utf-8'))
+        if Path(result['settings_path'])!=expected_settings or result['max_count']!=14:
+            raise RuntimeError('Portable executable did not use settings beside its own executable')
+        if set(p.name for p in folder.iterdir())!={'LuminaRouteFinder.exe','gui-settings.json'}:
+            raise RuntimeError('Portable folder contains unexpected runtime leftovers')
+        print('Portable ZIP: two-file layout, settings location and analysis verified.',flush=True)
 
 
 if __name__=='__main__':

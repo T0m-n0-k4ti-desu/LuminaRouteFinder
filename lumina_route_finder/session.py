@@ -3,18 +3,43 @@ import json
 import os
 from pathlib import Path
 import stat
+import sys
 import tempfile
 import threading
 
 ARTIFACTS={'result.json','board.json','board.png','route.png','recognized.png','error.png','input.png'}
 
 
-def load_cleanup_setting(path):
+def default_settings_path():
+    base=Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]
+    return base/'gui-settings.json'
+
+
+def read_cleanup_setting(path):
     try:
-        value=json.loads(Path(path).read_text(encoding='utf-8'))['delete_outputs_on_exit']
-        return value if isinstance(value,bool) else True
+        value=json.loads(Path(path).read_text(encoding='utf-8-sig'))['delete_outputs_on_exit']
+        return value if isinstance(value,bool) else None
     except (OSError,ValueError,KeyError,TypeError):
-        return True
+        return None
+
+
+def load_cleanup_setting(path):
+    value=read_cleanup_setting(path)
+    return True if value is None else value
+
+
+def migrate_cleanup_setting(path,legacy):
+    path,legacy=Path(path),Path(legacy)
+    if path.absolute()==legacy.absolute() or is_link(legacy) or is_link(path):
+        return
+    previous=read_cleanup_setting(legacy)
+    if previous is None:
+        return
+    if read_cleanup_setting(path) is None:
+        save_cleanup_setting(path,previous)
+    # Only remove a valid old settings file once the new file is readable.
+    if read_cleanup_setting(path) is not None:
+        legacy.unlink()
 
 
 def save_cleanup_setting(path, enabled):
@@ -40,8 +65,11 @@ def is_link(path):
 
 class SessionOutputs:
     """Never discover or recursively delete old, external or unregistered data."""
-    def __init__(self, root):
+    def __init__(self, root, parent_to_prune=None):
         self.root=Path(root).resolve()
+        self.parent_to_prune=Path(parent_to_prune).resolve() if parent_to_prune is not None else None
+        if self.parent_to_prune is not None and self.root.parent!=self.parent_to_prune:
+            raise ValueError('Only the immediate output parent can be pruned')
         self.directories=set()
         self.files=set()
         self.lock=threading.Lock()
@@ -59,6 +87,21 @@ class SessionOutputs:
             raise ValueError('Generated clipboard file must be inside the clipboard folder')
         with self.lock:
             self.files.add(path)
+
+    def prune_empty(self):
+        failures=[]
+        paths=[self.root]
+        if self.parent_to_prune is not None:
+            paths.append(self.parent_to_prune)
+        for path in paths:
+            if path.parent==path or is_link(path) or path.resolve()!=path:
+                continue
+            try:
+                if path.is_dir() and not any(path.iterdir()):
+                    path.rmdir()
+            except OSError:
+                failures.append(str(path))
+        return failures
 
     def cleanup(self):
         """Return failures; leave user-added files and previous sessions intact."""
@@ -100,4 +143,5 @@ class SessionOutputs:
                 clipboard.rmdir()
         except OSError:
             pass
+        failures.extend(self.prune_empty())
         return failures
