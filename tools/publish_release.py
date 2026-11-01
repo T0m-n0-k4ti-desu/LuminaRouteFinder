@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 import zipfile
 
 ASSETS=('LuminaRouteFinder.exe','LuminaRouteFinder-Windows-x64.zip','SHA256SUMS.txt')
@@ -64,7 +65,11 @@ def publish(tag,repo,folder,dry_run=False):
         raise ValueError('Release is already public; refusing to overwrite published assets')
     if release is None:
         gh(['release','create',tag,'--repo',repo,'--draft','--verify-tag','--title',tag,'--generate-notes'])
-        release=next(r for r in gh(['api',endpoint],True) if r['tag_name']==tag)
+        for attempt in range(10):
+            release=next((r for r in gh(['api',endpoint],True) if r['tag_name']==tag),None)
+            if release is not None:break
+            if attempt<9:time.sleep(2)
+        if release is None:raise ValueError('Created draft is not visible yet; retry publishing')
     assets_endpoint=f"repos/{repo}/releases/{release['id']}/assets"
     existing={a['name']:a for a in gh(['api',assets_endpoint],True)}
     pending=[]
@@ -76,10 +81,12 @@ def publish(tag,repo,folder,dry_run=False):
             raise ValueError(f'Draft asset differs; refusing to replace {path.name}')
     if pending:
         gh(['release','upload',tag,*map(str,pending),'--repo',repo])
-    uploaded={a['name']:a for a in gh(['api',assets_endpoint],True)}
-    for path in paths:
-        if uploaded.get(path.name,{}).get('digest')!='sha256:'+digests[path.name]:
-            raise ValueError(f'Uploaded asset could not be verified: {path.name}')
+    for attempt in range(10):
+        uploaded={a['name']:a for a in gh(['api',assets_endpoint],True)}
+        missing=[p.name for p in paths if uploaded.get(p.name,{}).get('digest')!='sha256:'+digests[p.name]]
+        if not missing:break
+        if attempt<9:time.sleep(2)
+    if missing:raise ValueError(f'Uploaded asset could not be verified: {missing[0]}')
     gh(['release','edit',tag,'--repo',repo,'--draft=false','--latest'])
     return {'tag':tag,'url':f'https://github.com/{repo}/releases/tag/{tag}','assets':list(ASSETS)}
 

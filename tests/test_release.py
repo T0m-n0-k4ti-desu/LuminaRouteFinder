@@ -58,6 +58,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('--draft',commands[1])
         self.assertIn('--verify-tag',commands[1])
 
+    def test_delayed_draft_and_asset_listing_is_retried_before_publishing(self):
+        responses=[[], '', [], [self.draft], [], '', [], self.assets, '']
+        with patch.object(release.time,'sleep'),patch.object(release,'gh',side_effect=responses) as gh:
+            release.publish('v9.9.9','owner/repo',self.folder)
+        self.assertEqual(gh.call_args_list[-1].args[0][:2],['release','edit'])
+
     def test_upload_failure_leaves_release_unpublished(self):
         failure=subprocess.CalledProcessError(1,['gh','release','upload'])
         with patch.object(release,'gh',side_effect=[[], '', [self.draft], [], failure]) as gh:
@@ -66,7 +72,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse(any(c.args[0][:2]==['release','edit'] for c in gh.call_args_list))
 
     def test_missing_zip_on_server_prevents_publishing(self):
-        with patch.object(release,'gh',side_effect=[[self.draft], [], '', [self.assets[0],self.assets[2]]]) as gh:
+        with patch.object(release.time,'sleep'),patch.object(release,'gh',side_effect=[[self.draft], [], '']+[[self.assets[0],self.assets[2]]]*10) as gh:
             with self.assertRaisesRegex(ValueError,'could not be verified'):
                 release.publish('v9.9.9','owner/repo',self.folder)
         self.assertFalse(any(c.args[0][:2]==['release','edit'] for c in gh.call_args_list))
