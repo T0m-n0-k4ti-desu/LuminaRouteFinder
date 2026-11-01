@@ -38,15 +38,29 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
                     raise RecognitionError([issue(ErrorCode.INVALID_REGION,'Region is empty, too small or outside the input image.')])
                 input_image=input_image[y1:y2,x1:x2].copy();offset=(x1,y1)
             checkpoint(cancel,progress,'盤面・接続を認識中')
-            board,origin,edges,diagnostics,score=recognize(input_image)
+            try:
+                board,origin,edges,diagnostics,score=recognize(input_image)
+                needs_review=False
+            except RecognitionError as exc:
+                if cache is None or not exc.issues or any(i['code']!='AMBIGUOUS_CONNECTION' for i in exc.issues):raise
+                # Validation still rejects hidden/occluded/incomplete boards. Only
+                # ambiguous connections may be retained for explicit human review.
+                board,origin,edges,diagnostics,score=recognize(input_image,allow_uncertain=True)
+                needs_review=True
+                review_issues=exc.issues
             origin=(origin[0]+offset[0],origin[1]+offset[1])
             checkpoint(cancel,progress,'コンテンツを判定中')
             from .contents import classify_contents
             labels,content_diagnostics=classify_contents(board,strict=False)
             snapshot=BoardSnapshot(board,origin,edges,diagnostics,score,labels,content_diagnostics,input_crop=input_image.copy() if region else None)
+            if needs_review:
+                snapshot.confirmed=False
+                snapshot.pending_edges=[(tuple(d['from']),tuple(d['to'])) for d in diagnostics if d['state']=='uncertain']
             checkpoint(cancel)
             if cache is not None:cache.put(key,snapshot)
+            if needs_review:raise RecognitionError(review_issues,board,origin)
         else:checkpoint(cancel,progress,'認識結果を再利用')
+        if not snapshot.confirmed:raise RecognitionError([issue(ErrorCode.AMBIGUOUS_CONNECTION,'Manual confirmation is required.')],snapshot.board,snapshot.origin)
         board,origin,edges,diagnostics,score=snapshot.board,snapshot.origin,snapshot.edges,snapshot.diagnostics,snapshot.score
         labels,content_diagnostics=snapshot.labels,snapshot.content_diagnostics
         if region is not None:

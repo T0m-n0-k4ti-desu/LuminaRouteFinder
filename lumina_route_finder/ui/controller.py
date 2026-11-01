@@ -458,6 +458,13 @@ class Application:
         self.view.fallback_priority.set(next(label for label,key in FALLBACK_CHOICES.items() if key==values['fallback_priority']))
         self.objective=values['objective'];self.weights=dict(values['weights']);self.options_changed()
 
+    def open_recognition(self):
+        if self.busy or self.closing:return
+        if self.analysis_cache.snapshot is None:
+            messagebox.showinfo('認識確認','先に画像を解析してください。盤面自体を検証できない画像は補正できません。',parent=self.root);return
+        from .recognition_inspector import RecognitionInspector
+        RecognitionInspector(self)
+
     def open_preferences(self):
         if not self.busy and not self.closing:
             from .preferences import PreferencesDialog
