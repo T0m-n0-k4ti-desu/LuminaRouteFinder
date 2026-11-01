@@ -16,7 +16,7 @@ spec.loader.exec_module(release)
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
-        self.folder=Path(self.tmp.name)
+        self.folder=Path(self.tmp.name).resolve()
         exe=self.folder/release.ASSETS[0];exe.write_bytes(b'MZ-release-example')
         archive=self.folder/release.ASSETS[1]
         with zipfile.ZipFile(archive,'w') as bundle:

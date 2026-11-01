@@ -12,7 +12,7 @@ class SessionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             exe=Path(temp)/'portable/LuminaRouteFinder.exe'
             with patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(exe)):
-                self.assertEqual(default_settings_path(),exe.parent/'gui-settings.json')
+                self.assertEqual(default_settings_path(),exe.resolve().parent/'gui-settings.json')
 
     def test_legacy_setting_migrates_and_existing_new_setting_wins(self):
         from lumina_route_finder.session import migrate_cleanup_setting
@@ -79,6 +79,25 @@ class SessionTests(unittest.TestCase):
             self.assertTrue(previous.exists())
             self.assertTrue(settings.exists())
             self.assertEqual(session.cleanup(),[])
+
+    def test_clipboard_short_path_alias_is_registered_and_cleaned(self):
+        import ctypes
+        import os
+        if os.name!='nt':self.skipTest('Windows short paths only')
+        with tempfile.TemporaryDirectory() as temp:
+            root=(Path(temp)/'Long output folder name').resolve()
+            clipboard=root/'clipboard';clipboard.mkdir(parents=True)
+            source=clipboard/'clipboard image.png';source.write_bytes(b'new')
+            buffer=ctypes.create_unicode_buffer(32768)
+            length=ctypes.windll.kernel32.GetShortPathNameW(str(source),buffer,len(buffer))
+            if not length or length>=len(buffer):self.skipTest('Short path unavailable')
+            alias=Path(buffer.value)
+            if alias==source:self.skipTest('Filesystem does not provide a short alias')
+            self.assertEqual(alias.resolve(),source)
+            session=SessionOutputs(root)
+            session.add_file(alias)
+            self.assertEqual(session.cleanup(),[])
+            self.assertFalse(source.exists())
 
     def test_empty_generated_directories_removed(self):
         with tempfile.TemporaryDirectory() as temp:

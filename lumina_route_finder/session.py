@@ -83,7 +83,7 @@ class SessionOutputs:
 
     def add_file(self,path):
         path=Path(path).absolute()
-        if path.parent!=self.root/'clipboard' or path.resolve().parent!=self.root/'clipboard' or is_link(path):
+        if path.parent.resolve()!=self.root/'clipboard' or path.resolve().parent!=self.root/'clipboard' or is_link(path):
             raise ValueError('Generated clipboard file must be inside the clipboard folder')
         with self.lock:
             self.files.add(path)

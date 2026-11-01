@@ -50,7 +50,7 @@ def test_executable():
 
 def test_portable_zip(archive):
     with tempfile.TemporaryDirectory(prefix='lumina_portable_') as temp:
-        folder=Path(temp)
+        folder=Path(temp).resolve()
         with zipfile.ZipFile(archive) as bundle:
             if set(bundle.namelist())!={'LuminaRouteFinder.exe','gui-settings.json'}:
                 raise RuntimeError('Portable ZIP must contain exactly the executable and settings')
