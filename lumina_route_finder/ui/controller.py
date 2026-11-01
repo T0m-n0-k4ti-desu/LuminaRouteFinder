@@ -46,6 +46,9 @@ class Application:
         self.delete_outputs=tk.BooleanVar(master=root,value=initial_setting if self.settings_notice else load_cleanup_setting(self.settings_path))
         self.saved_options=initial_options if self.settings_notice else load_settings(self.settings_path)
         self.initial_path_limit=self.saved_options['initial_path_limit']
+        self.objective=self.saved_options['objective']
+        self.weights=dict(self.saved_options['weights'])
+        self.presets=dict(self.saved_options['presets'])
         self.analysis_cache=AnalysisCache()
         self.cancel_event=threading.Event()
         self.worker_thread=None
@@ -171,6 +174,7 @@ class Application:
     def options_changed(self,event=None):
         if self.busy or self.closing:
             return
+        self.view.objective_label.configure(text='????: '+{'count':'?????','weight':'??????','count_then_weight':'????????????'}[self.objective])
         self.view.content_list.configure(state='normal' if self.view.exclude_enabled.get() else 'disabled')
         if self.result is not None:
             self.clear_result()
@@ -221,15 +225,15 @@ class Application:
         self.set_details('盤面と接続を確認しています。')
         self.view.progress.pack(fill='x',pady=(0,10),before=self.view.body)
         self.view.progress.start(12)
-        self.worker_thread=threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types,fallback_priority),daemon=True)
+        self.worker_thread=threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types,fallback_priority,self.objective,dict(self.weights)),daemon=True)
         self.worker_thread.start()
 
-    def worker(self,source,limit,region,avoid_repeated=False,excluded_types=(),fallback_priority='stage'):
+    def worker(self,source,limit,region,avoid_repeated=False,excluded_types=(),fallback_priority='stage',objective='count',weights=None):
         try:
             self.messages.put(('done',analyze_file(source,self.output_root,limit,region,
                                                            on_created=self.session_outputs.add_directory,
                                                            avoid_repeated=avoid_repeated,excluded_types=excluded_types,fallback_priority=fallback_priority,cache=self.analysis_cache,cancel=self.cancel_event,
-                                                           progress=lambda stage:self.messages.put(('progress',stage)))))
+                                                           progress=lambda stage:self.messages.put(('progress',stage)),objective=objective,weights=weights)))
         except AnalysisCancelled:
             self.messages.put(('cancelled',None))
         except Exception as exc:
@@ -374,9 +378,30 @@ class Application:
                 'exclude_enabled':self.view.exclude_enabled.get(),
                 'excluded_types':[key for i,key in enumerate(CONTENT_NAMES) if i in self.view.content_list.curselection()],
                 'fallback_priority':FALLBACK_CHOICES[self.view.fallback_priority.get()],
-                'initial_path_limit':self.initial_path_limit})
+                'initial_path_limit':self.initial_path_limit,'objective':self.objective,'weights':self.weights,'presets':self.presets})
         except OSError as exc:
             self.set_details(error_message(ErrorCode.SETTINGS_SAVE_ERROR, str(exc)))
+
+    def current_search(self):
+        from ..settings import normalize_search
+        return normalize_search({'avoid_repeated':self.view.avoid_repeated.get(),'exclude_enabled':self.view.exclude_enabled.get(),
+            'excluded_types':[key for i,key in enumerate(CONTENT_NAMES) if i in self.view.content_list.curselection()],
+            'fallback_priority':FALLBACK_CHOICES[self.view.fallback_priority.get()],'objective':self.objective,'weights':self.weights})
+
+    def apply_search(self,values):
+        from ..settings import normalize_search
+        values=normalize_search(values)
+        self.view.avoid_repeated.set(values['avoid_repeated']);self.view.exclude_enabled.set(values['exclude_enabled'])
+        self.view.content_list.configure(state='normal');self.view.content_list.selection_clear(0,'end')
+        for i,key in enumerate(CONTENT_NAMES):
+            if key in values['excluded_types']:self.view.content_list.selection_set(i)
+        self.view.fallback_priority.set(next(label for label,key in FALLBACK_CHOICES.items() if key==values['fallback_priority']))
+        self.objective=values['objective'];self.weights=dict(values['weights']);self.options_changed()
+
+    def open_preferences(self):
+        if not self.busy and not self.closing:
+            from .preferences import PreferencesDialog
+            PreferencesDialog(self)
 
     def close(self):
         if self.closed or self.closing:

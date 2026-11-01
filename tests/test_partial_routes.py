@@ -119,7 +119,7 @@ class SettingsTests(unittest.TestCase):
             values={'delete_outputs_on_exit':False,'avoid_repeated':True,'exclude_enabled':True,'excluded_types':['escape_room'],'fallback_priority':'count','initial_path_limit':3}
             save_settings(old,values)
             migrate_cleanup_setting(new,old)
-            self.assertEqual(load_settings(new),values)
+            self.assertEqual({k:load_settings(new)[k] for k in values},values)
             self.assertFalse(old.exists())
             save_settings(old,dict(values,fallback_priority='stage'))
             migrate_cleanup_setting(new,old)

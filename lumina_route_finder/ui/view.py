@@ -34,6 +34,7 @@ class ApplicationView:
         self.analyze_button.pack(side='left')
         self.cancel_button=ttk.Button(inputs,text='中止',command=controller.cancel_analysis,state='disabled')
         self.cancel_button.pack(side='left',padx=(6,0))
+        ttk.Button(inputs,text='設定・プリセット',command=controller.open_preferences).pack(side='left',padx=(6,0))
         self.drop_label = tk.Label(main,text='画像をドロップ、またはCtrl＋Vで貼り付けできます（1枚）',
                                    bg='#eef3f8',fg='#42556b',pady=12,highlightthickness=1,highlightbackground='#b8c9da')
         self.drop_label.pack(fill='x',pady=(10,12))
@@ -64,6 +65,8 @@ class ApplicationView:
         self.fallback_combo=ttk.Combobox(options,textvariable=self.fallback_priority,values=list(FALLBACK_CHOICES),state='readonly',width=30)
         self.fallback_combo.grid(row=2,column=1,sticky='ew',pady=(8,0))
         self.fallback_combo.bind('<<ComboboxSelected>>',controller.options_changed)
+        self.objective_label=ttk.Label(options,text='????: '+{'count':'?????','weight':'??????','count_then_weight':'????????????'}[controller.objective])
+        self.objective_label.grid(row=3,column=0,columnspan=2,sticky='w',pady=(6,0))
         self.progress = ttk.Progressbar(main,mode='indeterminate')
         body = ttk.Frame(main)
         self.body = body
