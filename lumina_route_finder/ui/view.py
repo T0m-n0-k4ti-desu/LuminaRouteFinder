@@ -34,11 +34,20 @@ class ApplicationView:
         self.analyze_button.pack(side='left')
         self.cancel_button=ttk.Button(inputs,text='中止',command=controller.cancel_analysis,state='disabled')
         self.cancel_button.pack(side='left',padx=(6,0))
+        ttk.Button(inputs,text='設定・プリセット',command=controller.open_preferences).pack(side='left',padx=(6,0))
         self.drop_label = tk.Label(main,text='画像をドロップ、またはCtrl＋Vで貼り付けできます（1枚）',
                                    bg='#eef3f8',fg='#42556b',pady=12,highlightthickness=1,highlightbackground='#b8c9da')
         self.drop_label.pack(fill='x',pady=(10,12))
-        options = ttk.LabelFrame(main, text='探索オプション', padding=8)
-        options.pack(fill='x', pady=(0,10))
+        summary=ttk.Frame(main)
+        summary.pack(fill='x',pady=(0,10))
+        self.summary_text=tk.StringVar(master=root)
+        self.summary_label=ttk.Label(summary,textvariable=self.summary_text,wraplength=700)
+        self.summary_label.pack(side='left',fill='x',expand=True)
+        self.quick_settings_button=ttk.Button(summary,text='クイック設定を表示',command=lambda:self.toggle_quick_settings(controller))
+        self.quick_settings_button.pack(side='right',padx=(10,0))
+        summary.bind('<Configure>',lambda event:self.summary_label.configure(wraplength=max(180,event.width-self.quick_settings_button.winfo_reqwidth()-12)))
+        self.quick_settings_visible=False
+        self.options_frame=options=ttk.LabelFrame(main,text='クイック設定（設定画面からも変更できます）',padding=8)
         self.avoid_repeated = tk.BooleanVar(master=root,value=controller.saved_options['avoid_repeated'])
         self.exclude_enabled = tk.BooleanVar(master=root,value=controller.saved_options['exclude_enabled'])
         self.repeat_check = ttk.Checkbutton(options,text='同じコンテンツの連続を禁止',variable=self.avoid_repeated,
@@ -64,12 +73,14 @@ class ApplicationView:
         self.fallback_combo=ttk.Combobox(options,textvariable=self.fallback_priority,values=list(FALLBACK_CHOICES),state='readonly',width=30)
         self.fallback_combo.grid(row=2,column=1,sticky='ew',pady=(8,0))
         self.fallback_combo.bind('<<ComboboxSelected>>',controller.options_changed)
+        self.objective_label=ttk.Label(options,text='経路評価: '+{'count':'通過数最大','weight':'重み合計最大','count_then_weight':'通過数優先・同数時に重み'}[controller.objective])
+        self.objective_label.grid(row=3,column=0,columnspan=2,sticky='w',pady=(6,0))
+        self.cleanup_check=ttk.Checkbutton(options,text='終了時に今回の出力（解析結果・貼り付け画像）を削除',variable=controller.delete_outputs,command=controller.save_settings)
+        self.cleanup_check.grid(row=4,column=0,columnspan=3,sticky='w',pady=(8,0))
         self.progress = ttk.Progressbar(main,mode='indeterminate')
         body = ttk.Frame(main)
         self.body = body
         body.pack(fill='both',expand=True)
-        self.cleanup_check=ttk.Checkbutton(main,text='終了時に今回の出力（解析結果・貼り付け画像）を削除',variable=controller.delete_outputs,command=controller.save_settings)
-        self.cleanup_check.pack(anchor='w',pady=(12,0))
         body.columnconfigure(0,weight=1)
         body.columnconfigure(1,weight=0)
         body.rowconfigure(0,weight=1)
@@ -84,32 +95,40 @@ class ApplicationView:
         horizontal = ttk.Scrollbar(preview_frame,orient='horizontal',command=self.canvas.xview)
         horizontal.grid(row=1,column=0,sticky='ew')
         self.canvas.configure(yscrollcommand=vertical.set,xscrollcommand=horizontal.set)
-        toolbar = ttk.Frame(preview_frame)
-        toolbar.grid(row=2,column=0,sticky='w',pady=(8,0))
-        ttk.Button(toolbar,text='全体表示',command=lambda:controller.preview.fit()).pack(side='left')
-        ttk.Button(toolbar,text='＋',width=4,command=lambda:controller.preview.change_zoom(1.25)).pack(side='left',padx=4)
-        ttk.Button(toolbar,text='－',width=4,command=lambda:controller.preview.change_zoom(.8)).pack(side='left')
-        self.scale_text = tk.StringVar(value='')
-        ttk.Label(toolbar,textvariable=self.scale_text).pack(side='left',padx=10)
-        self.pages = ttk.Frame(preview_frame)
-        self.pages.grid(row=3,column=0,sticky='ew',pady=(10,0))
-        self.previous_button = ttk.Button(self.pages,text='← 前へ',command=lambda:controller.change_page(-1),state='disabled')
+        self.controls=ttk.Frame(preview_frame)
+        self.controls.grid(row=2,column=0,columnspan=2,sticky='ew',pady=(8,0))
+        self.controls.columnconfigure(0,weight=1)
+        self.controls.columnconfigure(1,weight=1)
+        self.zoom_tools=ttk.Frame(self.controls)
+        ttk.Button(self.zoom_tools,text='全体表示',command=lambda:controller.preview.fit()).pack(side='left')
+        ttk.Button(self.zoom_tools,text='＋',width=4,command=lambda:controller.preview.change_zoom(1.25)).pack(side='left',padx=4)
+        ttk.Button(self.zoom_tools,text='－',width=4,command=lambda:controller.preview.change_zoom(.8)).pack(side='left')
+        self.scale_text=tk.StringVar(value='')
+        ttk.Label(self.zoom_tools,textvariable=self.scale_text,width=5).pack(side='left',padx=(6,0))
+        self.pages=ttk.Frame(self.controls)
+        self.previous_button=ttk.Button(self.pages,text='← 前へ',command=lambda:controller.change_page(-1),state='disabled')
         self.previous_button.pack(side='left')
-        self.page_text = tk.StringVar(value='')
-        ttk.Label(self.pages,textvariable=self.page_text).pack(side='left',padx=12)
-        self.next_button = ttk.Button(self.pages,text='次へ →',command=lambda:controller.change_page(1),state='disabled')
+        self.page_text=tk.StringVar(value='')
+        self.page_label=ttk.Label(self.pages,textvariable=self.page_text)
+        self.page_label.pack(side='left',padx=8)
+        self.next_button=ttk.Button(self.pages,text='次へ →',command=lambda:controller.change_page(1),state='disabled')
         self.next_button.pack(side='left')
-        source_tools=ttk.Frame(preview_frame)
-        source_tools.grid(row=4,column=0,sticky='ew',pady=(10,0))
-        ttk.Button(source_tools,text='入力画像',command=controller.show_input).pack(side='left')
-        ttk.Button(source_tools,text='解析結果',command=controller.show_result).pack(side='left',padx=5)
+        self.source_tools=ttk.Frame(self.controls)
+        ttk.Button(self.source_tools,text='入力画像',command=controller.show_input).pack(side='left')
+        ttk.Button(self.source_tools,text='解析結果',command=controller.show_result).pack(side='left',padx=5)
         self.selecting=tk.BooleanVar(value=False)
-        self.select_button=ttk.Checkbutton(source_tools,text='範囲指定',variable=self.selecting,command=controller.begin_selection)
+        self.select_button=ttk.Checkbutton(self.source_tools,text='範囲指定',variable=self.selecting,command=controller.begin_selection)
         self.select_button.pack(side='left')
-        self.reset_region_button=ttk.Button(source_tools,text='範囲解除',command=controller.clear_region)
+        self.reset_region_button=ttk.Button(self.source_tools,text='範囲解除',command=controller.clear_region)
         self.reset_region_button.pack(side='left',padx=5)
+        self.inspection_tools=ttk.Frame(self.controls)
+        ttk.Button(self.inspection_tools,text='認識確認・補正',command=controller.open_recognition).pack(side='left')
+        ttk.Button(self.inspection_tools,text='未到達の原因・比較',command=controller.open_diagnostics).pack(side='left',padx=(5,0))
         self.region_text=tk.StringVar(value='自動検出（画像全体）')
-        ttk.Label(preview_frame,textvariable=self.region_text).grid(row=5,column=0,sticky='w',pady=(4,0))
+        self.region_label=ttk.Label(self.controls,textvariable=self.region_text,wraplength=650)
+        self.controls.bind('<Configure>',lambda event:self.layout_controls(event.width))
+        self.controls_layout=None
+        self.layout_controls(700)
         sidebar = ttk.Frame(body,width=310)
         sidebar.grid(row=0,column=1,sticky='nsew')
         sidebar.grid_propagate(False)
@@ -127,8 +146,15 @@ class ApplicationView:
         self.details_scroll=ttk.Scrollbar(detail_frame,orient='vertical',command=self.details.yview)
         self.details_scroll.grid(row=0,column=1,sticky='ns')
         self.details.configure(yscrollcommand=self.details_scroll.set)
+        self.details.tag_configure('step-focus',background='#ffe29a')
+        self.details.bind('<ButtonRelease-1>',controller.details_clicked)
         self.open_button = ttk.Button(sidebar,text='結果フォルダーを開く',command=controller.open_output,state='disabled')
         self.open_button.grid(row=2,column=0,sticky='ew',pady=(12,0))
+        actions=ttk.Frame(sidebar)
+        actions.grid(row=4,column=0,sticky='ew',pady=(8,0))
+        ttk.Button(actions,text='候補保存',command=controller.save_candidate).pack(side='left')
+        ttk.Button(actions,text='画像コピー',command=controller.copy_candidate).pack(side='left',padx=3)
+        ttk.Button(actions,text='順序コピー',command=controller.copy_steps).pack(side='left')
         self.output_label = ttk.Label(sidebar,text='',wraplength=300)
         self.output_label.grid(row=3,column=0,sticky='ew',pady=(8,0))
         for widget in (self.entry,self.drop_label,self.canvas):
@@ -138,3 +164,39 @@ class ApplicationView:
         self.entry.bind('<Return>',lambda event:controller.start())
         root.bind('<Control-v>',controller.paste_image)
         root.bind('<Control-V>',controller.paste_image)
+
+
+    def refresh_summary(self,controller):
+        names={'count':'通過数最大','weight':'重み合計最大','count_then_weight':'通過数優先・同数時に重み'}
+        excluded=len(self.content_list.curselection())
+        exclusion_text=(f'{excluded}種類' if excluded else '未選択') if self.exclude_enabled.get() else '無効'
+        fallback=FALLBACK_CHOICES[self.fallback_priority.get()]
+        fallback_text={'stage':'段階優先','count':'通過数優先' if controller.objective=='count' else '経路評価優先','none':'途中経路なし'}[fallback]
+        parts=[names[controller.objective],
+               '連続禁止: '+('有効' if self.avoid_repeated.get() else '無効'),
+               '除外: '+exclusion_text,
+               '未到達: '+fallback_text,
+               '終了時削除: '+('有効' if controller.delete_outputs.get() else '無効')]
+        self.summary_text.set(' / '.join(parts))
+
+    def toggle_quick_settings(self,controller):
+        if controller.busy or controller.closing:return
+        self.quick_settings_visible=not self.quick_settings_visible
+        if self.quick_settings_visible:
+            self.options_frame.pack(fill='x',pady=(0,10),before=self.body)
+        else:self.options_frame.pack_forget()
+        self.quick_settings_button.configure(text='クイック設定を隠す' if self.quick_settings_visible else 'クイック設定を表示')
+
+    def layout_controls(self,width):
+        narrow=width<620
+        self.region_label.configure(wraplength=max(180,width-8))
+        peer=self.zoom_tools if narrow else self.inspection_tools
+        self.page_label.configure(wraplength=max(60,width-peer.winfo_reqwidth()-self.previous_button.winfo_reqwidth()-self.next_button.winfo_reqwidth()-24))
+        if self.controls_layout==narrow:return
+        self.controls_layout=narrow
+        for widget in (self.zoom_tools,self.pages,self.source_tools,self.inspection_tools,self.region_label):widget.grid_forget()
+        self.source_tools.grid(row=0,column=0,columnspan=2 if narrow else 1,sticky='w')
+        self.zoom_tools.grid(row=1 if narrow else 0,column=0 if narrow else 1,sticky='w' if narrow else 'e',pady=(5,0) if narrow else 0)
+        self.inspection_tools.grid(row=2 if narrow else 1,column=0,columnspan=2 if narrow else 1,sticky='w',pady=(5,0))
+        self.pages.grid(row=1,column=1,sticky='e',pady=(5,0))
+        self.region_label.grid(row=3 if narrow else 2,column=0,columnspan=2,sticky='ew',pady=(4,0))

@@ -85,6 +85,10 @@ GUIはexe横（Python版はリポジトリ直下）の `gui-settings.json` を�
 
 ソルバーの直接呼び出しは互換性のため `fallback_priority=None` が既定です。途中経路を求める場合は `stage` または `count` を渡してください。GUI・CLIは到達段階優先が既定です。
 
+### 評価とプリセットの設定
+
+`objective` は `count`（通過数）、`weight`（重み合計）、`count_then_weight`（通過数→重み）です。`weights` は種類IDから有限数への辞書で、未指定の種類は1、値は±1,000,000以内です。`presets` は名前から探索条件辞書への対応で、設定画面から編集できます。画像の手動補正と認識キャッシュは起動中のメモリーだけに保持し、画像・範囲を変えると破棄します。
+
 ## テスト
 
 ```powershell

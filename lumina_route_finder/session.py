@@ -8,7 +8,7 @@ from .settings import (DEFAULT_SETTINGS, read_settings_document, load_settings,
                        save_settings, default_settings_path, read_cleanup_setting,
                        load_cleanup_setting, migrate_cleanup_setting, save_cleanup_setting)
 
-ARTIFACTS={'result.json','board.json','board.png','route.png','recognized.png','error.png','input.png'}
+ARTIFACTS={'result.json','board.json','board.png','route.png','recognized.png','error.png','input.png','diagnostic.png'}
 
 
 

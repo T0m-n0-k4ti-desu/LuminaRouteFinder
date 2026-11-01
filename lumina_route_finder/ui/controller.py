@@ -46,6 +46,9 @@ class Application:
         self.delete_outputs=tk.BooleanVar(master=root,value=initial_setting if self.settings_notice else load_cleanup_setting(self.settings_path))
         self.saved_options=initial_options if self.settings_notice else load_settings(self.settings_path)
         self.initial_path_limit=self.saved_options['initial_path_limit']
+        self.objective=self.saved_options['objective']
+        self.weights=dict(self.saved_options['weights'])
+        self.presets=dict(self.saved_options['presets'])
         self.analysis_cache=AnalysisCache()
         self.cancel_event=threading.Event()
         self.worker_thread=None
@@ -53,6 +56,7 @@ class Application:
         self.close_wait_id=None
         self.result = None
         self.board = None
+        self.selected_step=None
         self.page = 0
         self.page_limit = self.initial_path_limit
         self.requested_page = 0
@@ -62,6 +66,7 @@ class Application:
         self.destination = None
         self.poll_id = None
         self.view = ApplicationView(self, root)
+        self.view.refresh_summary(self)
         self.preview = ImagePreview(self.view.canvas, self.view.selecting, self.view.scale_text,
                                     can_interact=lambda: not self.busy and not self.closing,
                                     is_closed=lambda: self.closed or self.closing,
@@ -69,6 +74,8 @@ class Application:
         self.set_details('パスを入力するか、画像を選択・ドロップして「解析」を押してください。\n\n対応形式: JPG / PNG / BMP\n\n結果の番号はアイコンの通過順です。')
         if self.settings_notice:
             self.set_details(self.settings_notice)
+        self.view.canvas.bind('<ButtonPress-1>',lambda event:setattr(self,'route_press',(event.x,event.y)),add='+')
+        self.view.canvas.bind('<ButtonRelease-1>',self.candidate_clicked,add='+')
         self.render()
         self.poll_id = root.after(80,self.poll)
 
@@ -171,6 +178,7 @@ class Application:
     def options_changed(self,event=None):
         if self.busy or self.closing:
             return
+        self.view.objective_label.configure(text='経路評価: '+{'count':'通過数最大','weight':'重み合計最大','count_then_weight':'通過数優先・同数時に重み'}[self.objective])
         self.view.content_list.configure(state='normal' if self.view.exclude_enabled.get() else 'disabled')
         if self.result is not None:
             self.clear_result()
@@ -221,15 +229,15 @@ class Application:
         self.set_details('盤面と接続を確認しています。')
         self.view.progress.pack(fill='x',pady=(0,10),before=self.view.body)
         self.view.progress.start(12)
-        self.worker_thread=threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types,fallback_priority),daemon=True)
+        self.worker_thread=threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types,fallback_priority,self.objective,dict(self.weights)),daemon=True)
         self.worker_thread.start()
 
-    def worker(self,source,limit,region,avoid_repeated=False,excluded_types=(),fallback_priority='stage'):
+    def worker(self,source,limit,region,avoid_repeated=False,excluded_types=(),fallback_priority='stage',objective='count',weights=None):
         try:
             self.messages.put(('done',analyze_file(source,self.output_root,limit,region,
                                                            on_created=self.session_outputs.add_directory,
                                                            avoid_repeated=avoid_repeated,excluded_types=excluded_types,fallback_priority=fallback_priority,cache=self.analysis_cache,cancel=self.cancel_event,
-                                                           progress=lambda stage:self.messages.put(('progress',stage)))))
+                                                           progress=lambda stage:self.messages.put(('progress',stage)),objective=objective,weights=weights)))
         except AnalysisCancelled:
             self.messages.put(('cancelled',None))
         except Exception as exc:
@@ -256,6 +264,7 @@ class Application:
                 if not self.cancel_event.is_set():self.view.status.configure(text=payload+'…')
                 self.poll_id=self.root.after(20,self.poll)
                 return
+            if kind=='done' and self.cancel_event.is_set():kind,payload='cancelled',None
             self.view.cancel_button.configure(state='disabled')
             self.busy = False
             self.view.progress.stop()
@@ -291,6 +300,7 @@ class Application:
     def show_page(self, page):
         if self.result is None or self.result['status'] not in ('ok','partial'):
             return
+        self.selected_step=None
         self.page = page
         paths = self.result['paths']
         path = [(r-1,c-1) for r,c in paths[page]]
@@ -304,6 +314,65 @@ class Application:
         more = page+1 < len(paths) or self.result.get('paths_truncated',False)
         self.view.next_button.configure(state='normal' if more else 'disabled')
         self.render()
+
+    def candidate_image(self):
+        from ..route_export import candidate_image
+        return candidate_image(self.board,self.result,self.page,self.selected_step)
+
+    def save_candidate(self):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        path=filedialog.asksaveasfilename(parent=self.root,title='表示中の候補を保存',defaultextension='.png',filetypes=[('PNG','*.png')],initialfile=f'route_{self.page+1}.png')
+        if not path:return
+        try:
+            from ..route_export import save_candidate
+            save_candidate(path,self.board,self.result,self.page,self.output_root,self.selected_step)
+        except (OSError,ValueError) as exc:messagebox.showerror('保存できませんでした',str(exc),parent=self.root)
+
+    def copy_candidate(self):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        try:
+            from ..route_export import copy_image
+            copy_image(self.candidate_image(),self.root.winfo_id())
+        except (OSError,RuntimeError,ValueError) as exc:messagebox.showerror('コピーできませんでした',str(exc),parent=self.root)
+
+    def copy_steps(self):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        title,text,_=describe_result(self.result,self.page)
+        self.root.clipboard_clear();self.root.clipboard_append(title+'\n'+text)
+
+    def details_clicked(self,event):
+        import re
+        line=self.view.details.index(f'@{event.x},{event.y}').split('.')[0]
+        match=re.match(r'\s*(\d+)\. 第',self.view.details.get(line+'.0',line+'.end'))
+        if match:self.focus_step(int(match.group(1))-1)
+
+    def focus_step(self,index):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        path=self.result['paths'][self.page]
+        if not 0<=index<len(path):return
+        self.selected_step=index;self.preview.showing_input=False;self.image=self.candidate_image();self.render()
+        text=self.view.details.get('1.0','end');self.view.details.tag_remove('step-focus','1.0','end')
+        import re
+        for line,content in enumerate(text.splitlines(),1):
+            if re.match(r'\s*'+str(index+1)+r'\. 第',content):
+                self.view.details.tag_add('step-focus',f'{line}.0',f'{line}.end');self.view.details.see(f'{line}.0');break
+        from ..domain.geometry import center
+        x,y=center((path[index][0]-1,path[index][1]-1));sx,sy=self.preview.image_offset;scale=self.preview.display_scale
+        h,w=self.image.shape[:2];canvas=self.view.canvas
+        canvas.xview_moveto((sx+2*x*scale-canvas.winfo_width()/2)/max(canvas.winfo_width(),w*scale))
+        canvas.yview_moveto((sy+2*y*scale-canvas.winfo_height()/2)/max(canvas.winfo_height(),h*scale))
+
+    def candidate_clicked(self,event):
+        start=getattr(self,'route_press',None)
+        if start is not None and (event.x-start[0])**2+(event.y-start[1])**2>16:return
+        if self.preview.showing_input or self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        from ..domain.geometry import center
+        x=(self.view.canvas.canvasx(event.x)-self.preview.image_offset[0])/self.preview.display_scale
+        y=(self.view.canvas.canvasy(event.y)-self.preview.image_offset[1])/self.preview.display_scale
+        path=self.result['paths'][self.page]
+        distances=[(x-2*center((r-1,c-1))[0])**2+(y-2*center((r-1,c-1))[1])**2 for r,c in path]
+        index=min(range(len(path)),key=lambda i:distances[i])
+        if distances[index]<=24**2:self.focus_step(index)
 
     def change_page(self, delta):
         if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):
@@ -367,6 +436,7 @@ class Application:
             self.set_details(error_message(ErrorCode.OUTPUT_OPEN_ERROR, f'{self.destination}\n\n{exc}'))
 
     def save_settings(self):
+        self.view.refresh_summary(self)
         try:
             write_gui_settings(self.settings_path,{
                 'delete_outputs_on_exit':self.delete_outputs.get(),
@@ -374,9 +444,50 @@ class Application:
                 'exclude_enabled':self.view.exclude_enabled.get(),
                 'excluded_types':[key for i,key in enumerate(CONTENT_NAMES) if i in self.view.content_list.curselection()],
                 'fallback_priority':FALLBACK_CHOICES[self.view.fallback_priority.get()],
-                'initial_path_limit':self.initial_path_limit})
+                'initial_path_limit':self.initial_path_limit,'objective':self.objective,'weights':self.weights,'presets':self.presets})
         except OSError as exc:
             self.set_details(error_message(ErrorCode.SETTINGS_SAVE_ERROR, str(exc)))
+
+    def current_search(self):
+        from ..settings import normalize_search
+        return normalize_search({'avoid_repeated':self.view.avoid_repeated.get(),'exclude_enabled':self.view.exclude_enabled.get(),
+            'excluded_types':[key for i,key in enumerate(CONTENT_NAMES) if i in self.view.content_list.curselection()],
+            'fallback_priority':FALLBACK_CHOICES[self.view.fallback_priority.get()],'objective':self.objective,'weights':self.weights})
+
+    def apply_search(self,values):
+        from ..settings import normalize_search
+        values=normalize_search(values)
+        self.view.avoid_repeated.set(values['avoid_repeated']);self.view.exclude_enabled.set(values['exclude_enabled'])
+        self.view.content_list.configure(state='normal');self.view.content_list.selection_clear(0,'end')
+        for i,key in enumerate(CONTENT_NAMES):
+            if key in values['excluded_types']:self.view.content_list.selection_set(i)
+        self.view.fallback_priority.set(next(label for label,key in FALLBACK_CHOICES.items() if key==values['fallback_priority']))
+        self.objective=values['objective'];self.weights=dict(values['weights']);self.options_changed()
+
+    def open_diagnostics(self):
+        if self.busy or self.closing:return
+        snapshot=self.analysis_cache.snapshot
+        if snapshot is None or not snapshot.confirmed:
+            messagebox.showinfo('未到達診断','先に認識を確定して解析してください。',parent=self.root);return
+        try:
+            from ..domain.diagnostics import validate_types
+            validate_types(snapshot.labels,self.current_search())
+        except ValueError as exc:
+            messagebox.showerror('種類を確認してください',str(exc),parent=self.root);return
+        from .diagnostics_dialog import DiagnosticsDialog
+        DiagnosticsDialog(self)
+
+    def open_recognition(self):
+        if self.busy or self.closing:return
+        if self.analysis_cache.snapshot is None:
+            messagebox.showinfo('認識確認','先に画像を解析してください。盤面自体を検証できない画像は補正できません。',parent=self.root);return
+        from .recognition_inspector import RecognitionInspector
+        RecognitionInspector(self)
+
+    def open_preferences(self):
+        if not self.busy and not self.closing:
+            from .preferences import PreferencesDialog
+            PreferencesDialog(self)
 
     def close(self):
         if self.closed or self.closing:
