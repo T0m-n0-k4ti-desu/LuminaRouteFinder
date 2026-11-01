@@ -56,6 +56,7 @@ class Application:
         self.close_wait_id=None
         self.result = None
         self.board = None
+        self.selected_step=None
         self.page = 0
         self.page_limit = self.initial_path_limit
         self.requested_page = 0
@@ -72,6 +73,7 @@ class Application:
         self.set_details('パスを入力するか、画像を選択・ドロップして「解析」を押してください。\n\n対応形式: JPG / PNG / BMP\n\n結果の番号はアイコンの通過順です。')
         if self.settings_notice:
             self.set_details(self.settings_notice)
+        self.view.canvas.bind('<ButtonRelease-1>',self.candidate_clicked,add='+')
         self.render()
         self.poll_id = root.after(80,self.poll)
 
@@ -295,6 +297,7 @@ class Application:
     def show_page(self, page):
         if self.result is None or self.result['status'] not in ('ok','partial'):
             return
+        self.selected_step=None
         self.page = page
         paths = self.result['paths']
         path = [(r-1,c-1) for r,c in paths[page]]
@@ -308,6 +311,63 @@ class Application:
         more = page+1 < len(paths) or self.result.get('paths_truncated',False)
         self.view.next_button.configure(state='normal' if more else 'disabled')
         self.render()
+
+    def candidate_image(self):
+        from ..route_export import candidate_image
+        return candidate_image(self.board,self.result,self.page,self.selected_step)
+
+    def save_candidate(self):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        path=filedialog.asksaveasfilename(parent=self.root,title='表示中の候補を保存',defaultextension='.png',filetypes=[('PNG','*.png')],initialfile=f'route_{self.page+1}.png')
+        if not path:return
+        try:
+            from ..route_export import save_candidate
+            save_candidate(path,self.board,self.result,self.page,self.output_root,self.selected_step)
+        except (OSError,ValueError) as exc:messagebox.showerror('保存できませんでした',str(exc),parent=self.root)
+
+    def copy_candidate(self):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        try:
+            from ..route_export import copy_image
+            copy_image(self.candidate_image(),self.root.winfo_id())
+        except (OSError,RuntimeError,ValueError) as exc:messagebox.showerror('コピーできませんでした',str(exc),parent=self.root)
+
+    def copy_steps(self):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        title,text,_=describe_result(self.result,self.page)
+        self.root.clipboard_clear();self.root.clipboard_append(title+'\n'+text)
+
+    def details_clicked(self,event):
+        import re
+        line=self.view.details.index(f'@{event.x},{event.y}').split('.')[0]
+        match=re.match(r'\s*(\d+)\. 第',self.view.details.get(line+'.0',line+'.end'))
+        if match:self.focus_step(int(match.group(1))-1)
+
+    def focus_step(self,index):
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        path=self.result['paths'][self.page]
+        if not 0<=index<len(path):return
+        self.selected_step=index;self.preview.showing_input=False;self.image=self.candidate_image();self.render()
+        text=self.view.details.get('1.0','end');self.view.details.tag_remove('step-focus','1.0','end')
+        import re
+        for line,content in enumerate(text.splitlines(),1):
+            if re.match(r'\s*'+str(index+1)+r'\. 第',content):
+                self.view.details.tag_add('step-focus',f'{line}.0',f'{line}.end');self.view.details.see(f'{line}.0');break
+        from ..domain.geometry import center
+        x,y=center((path[index][0]-1,path[index][1]-1));sx,sy=self.preview.image_offset;scale=self.preview.display_scale
+        h,w=self.image.shape[:2];canvas=self.view.canvas
+        canvas.xview_moveto((sx+2*x*scale-canvas.winfo_width()/2)/max(canvas.winfo_width(),w*scale))
+        canvas.yview_moveto((sy+2*y*scale-canvas.winfo_height()/2)/max(canvas.winfo_height(),h*scale))
+
+    def candidate_clicked(self,event):
+        if self.preview.showing_input or self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
+        from ..domain.geometry import center
+        x=(self.view.canvas.canvasx(event.x)-self.preview.image_offset[0])/self.preview.display_scale
+        y=(self.view.canvas.canvasy(event.y)-self.preview.image_offset[1])/self.preview.display_scale
+        path=self.result['paths'][self.page]
+        distances=[(x-2*center((r-1,c-1))[0])**2+(y-2*center((r-1,c-1))[1])**2 for r,c in path]
+        index=min(range(len(path)),key=lambda i:distances[i])
+        if distances[index]<=24**2:self.focus_step(index)
 
     def change_page(self, delta):
         if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):
