@@ -32,7 +32,7 @@ class SessionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);legacy=root/'outputs/gui/gui-settings.json'
             save_cleanup_setting(legacy,False)
-            with patch('lumina_route_finder.session.save_settings',side_effect=OSError('read-only')):
+            with patch('lumina_route_finder.settings.save_settings',side_effect=OSError('read-only')):
                 with self.assertRaises(OSError):migrate_cleanup_setting(root/'gui-settings.json',legacy)
             self.assertFalse(load_cleanup_setting(legacy))
 

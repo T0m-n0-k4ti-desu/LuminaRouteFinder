@@ -67,7 +67,7 @@ class ContentTests(unittest.TestCase):
         labels,_ = classify_contents(board, strict=False)
         self.assertIsNone(labels[0,0])
         self.assertEqual(labels[0,1],EXPECTED[0][1])
-        with tempfile.TemporaryDirectory() as temp, patch('lumina_route_finder.__main__.recognize',
+        with tempfile.TemporaryDirectory() as temp, patch('lumina_route_finder.analysis.recognize',
                 return_value=(board,origin,edges,diagnostics,score)):
             result = run_image(self.source,Path(temp))
             strict = run_image(self.source,Path(temp)/'strict',avoid_repeated=True)
