@@ -21,6 +21,8 @@ class BoardSnapshot:
     score: float
     labels: dict
     content_diagnostics: list
+    confirmed: bool=True
+    pending_edges: list=field(default_factory=list)
     input_crop: object=None
     corrections: list=field(default_factory=list)
 

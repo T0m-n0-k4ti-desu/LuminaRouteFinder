@@ -67,6 +67,7 @@ class ApplicationView:
         self.fallback_combo.bind('<<ComboboxSelected>>',controller.options_changed)
         self.objective_label=ttk.Label(options,text='????: '+{'count':'?????','weight':'??????','count_then_weight':'????????????'}[controller.objective])
         self.objective_label.grid(row=3,column=0,columnspan=2,sticky='w',pady=(6,0))
+        ttk.Button(options,text='認識確認・補正',command=controller.open_recognition).grid(row=2,column=3,padx=(12,0))
         self.progress = ttk.Progressbar(main,mode='indeterminate')
         body = ttk.Frame(main)
         self.body = body
