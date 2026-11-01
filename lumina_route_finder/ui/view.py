@@ -65,9 +65,10 @@ class ApplicationView:
         self.fallback_combo=ttk.Combobox(options,textvariable=self.fallback_priority,values=list(FALLBACK_CHOICES),state='readonly',width=30)
         self.fallback_combo.grid(row=2,column=1,sticky='ew',pady=(8,0))
         self.fallback_combo.bind('<<ComboboxSelected>>',controller.options_changed)
-        self.objective_label=ttk.Label(options,text='????: '+{'count':'?????','weight':'??????','count_then_weight':'????????????'}[controller.objective])
+        self.objective_label=ttk.Label(options,text='経路評価: '+{'count':'通過数最大','weight':'重み合計最大','count_then_weight':'通過数優先・同数時に重み'}[controller.objective])
         self.objective_label.grid(row=3,column=0,columnspan=2,sticky='w',pady=(6,0))
         ttk.Button(options,text='認識確認・補正',command=controller.open_recognition).grid(row=2,column=3,padx=(12,0))
+        ttk.Button(options,text='未到達の原因・比較',command=controller.open_diagnostics).grid(row=3,column=3,padx=(12,0))
         self.progress = ttk.Progressbar(main,mode='indeterminate')
         body = ttk.Frame(main)
         self.body = body

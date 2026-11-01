@@ -1,4 +1,4 @@
-﻿import copy,tempfile,unittest
+import copy,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import numpy as np
@@ -58,5 +58,5 @@ class ReviewTests(unittest.TestCase):
                 dialog.nodes.selection_set('0,0');dialog.node_selected();dialog.kind.set('ボス変異戦闘');dialog.change_kind()
                 self.assertEqual(dialog.editor.snapshot.labels[(0,0)],'boss_mutation')
                 dialog.undo();self.assertEqual(dialog.editor.snapshot.labels[(0,0)],'escape_room')
-            finally:app.close()
+            finally:root.update_idletasks();app.close()
 if __name__=='__main__':unittest.main()

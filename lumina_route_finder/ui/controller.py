@@ -73,6 +73,7 @@ class Application:
         self.set_details('パスを入力するか、画像を選択・ドロップして「解析」を押してください。\n\n対応形式: JPG / PNG / BMP\n\n結果の番号はアイコンの通過順です。')
         if self.settings_notice:
             self.set_details(self.settings_notice)
+        self.view.canvas.bind('<ButtonPress-1>',lambda event:setattr(self,'route_press',(event.x,event.y)),add='+')
         self.view.canvas.bind('<ButtonRelease-1>',self.candidate_clicked,add='+')
         self.render()
         self.poll_id = root.after(80,self.poll)
@@ -176,7 +177,7 @@ class Application:
     def options_changed(self,event=None):
         if self.busy or self.closing:
             return
-        self.view.objective_label.configure(text='????: '+{'count':'?????','weight':'??????','count_then_weight':'????????????'}[self.objective])
+        self.view.objective_label.configure(text='経路評価: '+{'count':'通過数最大','weight':'重み合計最大','count_then_weight':'通過数優先・同数時に重み'}[self.objective])
         self.view.content_list.configure(state='normal' if self.view.exclude_enabled.get() else 'disabled')
         if self.result is not None:
             self.clear_result()
@@ -262,6 +263,7 @@ class Application:
                 if not self.cancel_event.is_set():self.view.status.configure(text=payload+'…')
                 self.poll_id=self.root.after(20,self.poll)
                 return
+            if kind=='done' and self.cancel_event.is_set():kind,payload='cancelled',None
             self.view.cancel_button.configure(state='disabled')
             self.busy = False
             self.view.progress.stop()
@@ -360,6 +362,8 @@ class Application:
         canvas.yview_moveto((sy+2*y*scale-canvas.winfo_height()/2)/max(canvas.winfo_height(),h*scale))
 
     def candidate_clicked(self,event):
+        start=getattr(self,'route_press',None)
+        if start is not None and (event.x-start[0])**2+(event.y-start[1])**2>16:return
         if self.preview.showing_input or self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
         from ..domain.geometry import center
         x=(self.view.canvas.canvasx(event.x)-self.preview.image_offset[0])/self.preview.display_scale
@@ -457,6 +461,19 @@ class Application:
             if key in values['excluded_types']:self.view.content_list.selection_set(i)
         self.view.fallback_priority.set(next(label for label,key in FALLBACK_CHOICES.items() if key==values['fallback_priority']))
         self.objective=values['objective'];self.weights=dict(values['weights']);self.options_changed()
+
+    def open_diagnostics(self):
+        if self.busy or self.closing:return
+        snapshot=self.analysis_cache.snapshot
+        if snapshot is None or not snapshot.confirmed:
+            messagebox.showinfo('未到達診断','先に認識を確定して解析してください。',parent=self.root);return
+        try:
+            from ..domain.diagnostics import validate_types
+            validate_types(snapshot.labels,self.current_search())
+        except ValueError as exc:
+            messagebox.showerror('種類を確認してください',str(exc),parent=self.root);return
+        from .diagnostics_dialog import DiagnosticsDialog
+        DiagnosticsDialog(self)
 
     def open_recognition(self):
         if self.busy or self.closing:return

@@ -9,7 +9,7 @@ from ..recognize import candidates
 
 class RecognitionInspector:
     def __init__(self,app):
-        self.app=app;self.key=app.analysis_cache.key
+        self.app=app;self.key=app.analysis_cache.key;self.revision=app.analysis_cache.revision
         self.editor=RecognitionEditor(app.analysis_cache.snapshot,app.analysis_cache.original)
         self.node=None;self.edge=None
         self.window=tk.Toplevel(app.root);self.window.title('認識確認・手動補正');self.window.geometry('1100x850');self.window.transient(app.root)
@@ -73,15 +73,15 @@ class RecognitionInspector:
         if self.node is not None and self.kind.get() in self.kind_values:
             self.editor.set_label(self.node,self.kind_values[self.kind.get()]);self.refresh()
     def change_edge(self):
-        if self.edge is not None:self.editor.set_edge(*self.edge,self.edge_state.get()=='あり');self.refresh()
+        if self.edge is not None:self.gaps.set(False);self.editor.set_edge(*self.edge,self.edge_state.get()=='あり');self.refresh()
     def undo(self):self.editor.undo();self.gaps.set(False);self.refresh()
     def reset(self):self.editor.reset();self.gaps.set(False);self.refresh()
     def apply(self):
         if self.app.busy or self.app.closing:return
         try:
-            if self.app.analysis_cache.key!=self.key or self.app.analysis_cache.signature(self.app.view.path.get().strip().strip('"').strip("'"),self.app.region)!=self.key:
+            if self.app.analysis_cache.key!=self.key or self.app.analysis_cache.revision!=self.revision or self.app.analysis_cache.signature(self.app.view.path.get().strip().strip('"').strip("'"),self.app.region)!=self.key:
                 raise ValueError('画像・解析範囲が変わりました。現在の画像を解析し直してください。')
             snapshot=self.editor.confirm(self.gaps.get())
         except (OSError,ValueError) as exc:
             messagebox.showerror('補正を適用できません',str(exc),parent=self.window);return
-        self.app.analysis_cache.snapshot=snapshot;self.app.options_changed();self.app.start();self.window.destroy()
+        self.app.analysis_cache.update(snapshot);self.app.options_changed();self.app.start();self.window.destroy()

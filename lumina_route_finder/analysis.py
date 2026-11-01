@@ -23,7 +23,8 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
               'assumptions': {'revisit':False,'horizontal_in_first_and_last_rows':True}}
     try:
         checkpoint(cancel,progress,'画像確認中')
-        key=cache.signature(source,region) if cache is not None else None
+        try:key=cache.signature(source,region) if cache is not None else None
+        except OSError as exc:raise RecognitionError([issue(ErrorCode.INPUT_READ_ERROR,str(exc))]) from exc
         snapshot=cache.get(key) if cache is not None else None
         reused=snapshot is not None
         if snapshot is None:
@@ -90,6 +91,13 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
         result['weights']=dict(weights or {})
         result['recognition_reused']=reused
         result['manual_corrections']=snapshot.corrections
+        if solved['status'] in ('partial','no_path'):
+            from .domain.diagnostics import diagnose
+            from .diagnostic_render import render_diagnostics
+            options={'avoid_repeated':avoid_repeated,'exclude_enabled':bool(excluded_types),'excluded_types':list(excluded_types),'objective':objective}
+            diagnostic=diagnose(labels.keys(),edges,labels,options)
+            result['unreachable_diagnostics']=diagnostic
+            write_image(destination/'diagnostic.png',render_diagnostics(board,diagnostic))
         result['board_origin'] = origin
         result['board_match'] = score
         checkpoint(cancel,progress,'結果を書き出し中')

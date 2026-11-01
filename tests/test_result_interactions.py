@@ -1,4 +1,4 @@
-﻿import tempfile,unittest
+import tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import tkinter as tk
@@ -24,5 +24,5 @@ class InteractionTests(unittest.TestCase):
                 with patch('lumina_route_finder.route_export.copy_image') as copy:
                     app.copy_candidate();self.assertTrue(np.array_equal(copy.call_args.args[0],app.candidate_image()))
                 app.show_page(0);self.assertIsNone(app.selected_step)
-            finally:app.close()
+            finally:root.update_idletasks();app.close()
 if __name__=='__main__':unittest.main()

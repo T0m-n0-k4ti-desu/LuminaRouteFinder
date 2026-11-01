@@ -1,6 +1,7 @@
 """Longest simple paths on a downward layered board."""
 from collections import defaultdict
 import math
+from fractions import Fraction
 
 
 def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False, fallback_priority=None, cancel=None, objective='count', weights=None):
@@ -18,6 +19,7 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
         raise ValueError('fallback_priority must be stage, count or None')
     if limit < 1:
         raise ValueError('limit must be positive')
+    weights={k:Fraction(str(v)) for k,v in weights.items()}
     nodes = set(map(tuple, nodes))
     if not nodes:
         return {'status': 'no_path', 'max_count': None, 'paths': [], 'optimal_path_count': 0}
@@ -48,6 +50,7 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
             raise ValueError('edges must be horizontal or one row downward')
     def metric(path):
         length=len(path)
+        if objective=='count':return length,0
         score=sum(weights.get(node_types[n],1) for n in path) if node_types is not None else length
         return (score,length) if objective=='weight' else (length,score if objective=='count_then_weight' else 0)
     def length_of(value):return value[0][1] if objective=='weight' else value[0][0]
@@ -107,7 +110,7 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
     count=sum(v[1] for v in winners)
     path_weights=[sum(weights.get(node_types[n],1) for n in path) if node_types else len(path) for path in paths]
     return {'status':'ok' if goal_reached else 'partial','max_count':length_of(winners[0]),'paths':paths,
-            'objective':objective,'best_metric':list(best),'path_weights':path_weights,
+            'objective':objective,'best_metric':[float(v) if isinstance(v,Fraction) else v for v in best],'path_weights':[float(v) for v in path_weights],
             'optimal_path_count':count,'paths_truncated':count>len(paths),
             'goal_reached':goal_reached,'reached_stage':reached_stage,
             'fallback_priority':fallback_priority}

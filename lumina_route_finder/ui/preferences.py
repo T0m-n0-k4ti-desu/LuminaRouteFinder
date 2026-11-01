@@ -1,4 +1,4 @@
-﻿"""Validated preferences and named search presets."""
+"""Validated preferences and named search presets."""
 import math
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -23,9 +23,12 @@ class PreferencesDialog:
         ttk.Checkbutton(general,text='終了時に今回の生成物を削除',variable=self.cleanup).pack(anchor='w',pady=5)
         ttk.Checkbutton(general,text='同じコンテンツの連続を禁止',variable=self.repeat).pack(anchor='w',pady=5)
         ttk.Checkbutton(general,text='選んだ種類を除外',variable=self.exclude).pack(anchor='w',pady=5)
-        self.kinds=tk.Listbox(general,selectmode='multiple',exportselection=False,height=6)
+        kind_frame=ttk.Frame(general);kind_frame.pack(fill='x')
+        self.kinds=tk.Listbox(kind_frame,selectmode='multiple',exportselection=False,height=6)
         for name in CONTENT_NAMES.values():self.kinds.insert('end',name)
-        self.kinds.pack(fill='x')
+        kind_scroll=ttk.Scrollbar(kind_frame,orient='vertical',command=self.kinds.yview)
+        self.kinds.configure(yscrollcommand=kind_scroll.set)
+        self.kinds.pack(side='left',fill='x',expand=True);kind_scroll.pack(side='right',fill='y')
         for label,var,values in [('経路の評価方法',self.objective,OBJECTIVES),('ゴール未到達時',self.fallback,FALLBACK_CHOICES)]:
             ttk.Label(general,text=label).pack(anchor='w',pady=(10,0))
             ttk.Combobox(general,textvariable=var,values=list(values),state='readonly',width=38).pack(anchor='w',pady=5)
