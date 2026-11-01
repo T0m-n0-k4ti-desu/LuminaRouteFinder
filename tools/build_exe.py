@@ -3,7 +3,8 @@ import hashlib
 from pathlib import Path
 import subprocess
 import sys
-from test_exe import test_executable
+from test_exe import test_executable,test_portable_zip
+from package_release import create_portable_zip
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -15,8 +16,11 @@ def main():
                     str(ROOT/'LuminaRouteFinder.spec')], cwd=ROOT, check=True)
     test_executable()
     exe=ROOT/'dist/LuminaRouteFinder.exe'
-    digest=hashlib.sha256(exe.read_bytes()).hexdigest()
-    (ROOT/'dist/SHA256SUMS.txt').write_text(f'{digest}  {exe.name}\n',encoding='ascii')
+    archive=create_portable_zip(exe,ROOT/'config/gui-settings.json',ROOT/'dist/LuminaRouteFinder-Windows-x64.zip')
+    test_portable_zip(archive)
+    lines=[f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}' for file in (exe,archive)]
+    (ROOT/'dist/SHA256SUMS.txt').write_text('\n'.join(lines)+'\n',encoding='ascii')
+    print(f'ZIP: {archive}')
     print(f'Built: {exe}')
 
 

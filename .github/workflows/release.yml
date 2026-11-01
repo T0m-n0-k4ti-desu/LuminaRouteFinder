@@ -1,0 +1,47 @@
+name: Build and publish Windows release
+
+'on':
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable version tag (e.g. v1.0.2)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-build.txt
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+      - name: Build EXE and portable ZIP and run executable checks
+        run: python tools/build_exe.py
+      - name: Publish verified EXE, ZIP and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/publish_release.py "$env:RELEASE_TAG"

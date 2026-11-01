@@ -19,10 +19,11 @@ if '--smoke-test' in sys.argv:
     parser.add_argument('--clipboard-test',action='store_true')
     parser.add_argument('--region-test',action='store_true')
     parser.add_argument('--scaled-header-test',action='store_true')
+    parser.add_argument('--portable-test',action='store_true')
     args=parser.parse_args()
     root=TkinterDnD.Tk()
     root.withdraw()
-    app=Application(root,args.report.parent/'analysis')
+    app=Application(root) if args.portable_test else Application(root,args.report.parent/'analysis')
     app.delete_outputs.set(True)
     if args.clipboard_test:
         from PIL import Image
@@ -50,6 +51,7 @@ if '--smoke-test' in sys.argv:
                 'generated_output':str(app.destination) if app.destination else None,
                 'input':app.result.get('input') if app.result else None,
                 'cleanup_enabled':app.delete_outputs.get(),
+                'settings_path':str(app.settings_path),
                 'tkdnd':root.tk.call('package','present','tkdnd')}
         args.report.parent.mkdir(parents=True,exist_ok=True)
         args.report.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

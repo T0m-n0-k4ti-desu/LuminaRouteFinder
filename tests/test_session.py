@@ -6,6 +6,48 @@ from lumina_route_finder.session import SessionOutputs,load_cleanup_setting,save
 
 
 class SessionTests(unittest.TestCase):
+    def test_default_settings_beside_executable_not_working_or_extraction_directory(self):
+        import sys
+        from lumina_route_finder.session import default_settings_path
+        with tempfile.TemporaryDirectory() as temp:
+            exe=Path(temp)/'portable/LuminaRouteFinder.exe'
+            with patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(exe)):
+                self.assertEqual(default_settings_path(),exe.parent/'gui-settings.json')
+
+    def test_legacy_setting_migrates_and_existing_new_setting_wins(self):
+        from lumina_route_finder.session import migrate_cleanup_setting
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);legacy=root/'outputs/gui/gui-settings.json';new=root/'gui-settings.json'
+            save_cleanup_setting(legacy,False)
+            migrate_cleanup_setting(new,legacy)
+            self.assertFalse(load_cleanup_setting(new))
+            self.assertFalse(legacy.exists())
+            save_cleanup_setting(legacy,True)
+            migrate_cleanup_setting(new,legacy)
+            self.assertFalse(load_cleanup_setting(new))
+            self.assertFalse(legacy.exists())
+
+    def test_migration_failure_keeps_old_setting(self):
+        from lumina_route_finder.session import migrate_cleanup_setting
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);legacy=root/'outputs/gui/gui-settings.json'
+            save_cleanup_setting(legacy,False)
+            with patch('lumina_route_finder.session.save_cleanup_setting',side_effect=OSError('read-only')):
+                with self.assertRaises(OSError):migrate_cleanup_setting(root/'gui-settings.json',legacy)
+            self.assertFalse(load_cleanup_setting(legacy))
+
+    def test_default_output_parent_removed_only_when_empty(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parent=Path(temp)/'outputs';root=parent/'gui';root.mkdir(parents=True)
+            session=SessionOutputs(root,parent_to_prune=parent)
+            (parent/'notes.txt').write_text('keep',encoding='utf-8')
+            self.assertEqual(session.cleanup(),[])
+            self.assertFalse(root.exists())
+            self.assertTrue((parent/'notes.txt').exists())
+            (parent/'notes.txt').unlink()
+            self.assertEqual(session.cleanup(),[])
+            self.assertFalse(parent.exists())
+
     def test_default_enabled_and_setting_persists(self):
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/'gui-settings.json'
@@ -45,7 +87,7 @@ class SessionTests(unittest.TestCase):
             (generated/'input.png').write_bytes(b'input')
             self.assertEqual(session.cleanup(),[])
             self.assertFalse(generated.exists())
-            self.assertTrue(root.exists())
+            self.assertFalse(root.exists())
 
     def test_outside_paths_and_root_cannot_be_registered(self):
         with tempfile.TemporaryDirectory() as temp:
