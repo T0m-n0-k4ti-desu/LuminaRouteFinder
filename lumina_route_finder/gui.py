@@ -19,7 +19,7 @@ from .__main__ import run_image
 from .recognize import RecognitionError, read_image
 from .render import render_route
 from .contents import CONTENT_NAMES
-from .session import SessionOutputs,load_cleanup_setting,save_cleanup_setting,default_settings_path,migrate_cleanup_setting,read_cleanup_setting,load_settings,save_settings as write_gui_settings
+from .session import SessionOutputs,load_cleanup_setting,default_settings_path,migrate_cleanup_setting,read_cleanup_setting,load_settings,save_settings as write_gui_settings
 
 FALLBACK_CHOICES={'到達段階を優先':'stage','通過アイコン数を優先':'count','途中経路を表示しない':'none'}
 
@@ -169,7 +169,7 @@ class Application:
         self.drop_label = tk.Label(main,text='画像をドロップ、またはCtrl＋Vで貼り付けできます（1枚）',
                                    bg='#eef3f8',fg='#42556b',pady=12,highlightthickness=1,highlightbackground='#b8c9da')
         self.drop_label.pack(fill='x',pady=(10,12))
-        options = ttk.LabelFrame(main, text='探索オプション（チェック時のみ有効）', padding=8)
+        options = ttk.LabelFrame(main, text='探索オプション', padding=8)
         options.pack(fill='x', pady=(0,10))
         self.avoid_repeated = tk.BooleanVar(master=root,value=self.saved_options['avoid_repeated'])
         self.exclude_enabled = tk.BooleanVar(master=root,value=self.saved_options['exclude_enabled'])
