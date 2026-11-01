@@ -36,6 +36,9 @@ python -m lumina_route_finder docs\images\sample_image.jpg
 # フォルダーを再帰処理
 python -m lumina_route_finder D:\Screenshots --output-dir outputs\samples
 
+# ゴール未到達時は通過数を優先（既定はstage、noneで途中経路を無効化）
+python -m lumina_route_finder docs\images\sample_image.jpg --fallback-priority count
+
 # 保存する同率候補の上限を変更
 python -m lumina_route_finder docs\images\sample_image.jpg --max-paths 100
 ```
@@ -53,7 +56,7 @@ python -m lumina_route_finder docs\images\sample_image.jpg --max-paths 100
 
 JSONのマス位置は `[段階, 列]` の1始まりです。GUIの範囲指定解析では、切り出した `input.png` と元画像の0始まり座標 `[左, 上, 右, 下]` の `input_region` も保存します。右・下の座標は範囲に含めません。
 
-終了コードは、全件正常なら0、認識エラーまたは到達不能なら1、引数不正なら2です。認識できた盤面でゴールに到達できない場合は `no_path` として区別します。
+終了コードは、全件正常なら0、認識エラーまたは到達不能なら1、引数不正なら2です。認識できた盤面でゴールに到達できず途中経路が得られた場合は `partial`、起点がない場合や途中経路を無効にした場合は `no_path` として区別します。`partial` も終了コードは1です。途中経路でも通過数・候補・画像を保存し、`goal_reached: false` と1始まりの `reached_stage` を記録します。
 
 ### 手動グラフの探索
 
@@ -64,6 +67,23 @@ python -m lumina_route_finder examples\small_board.json --graph --output-dir out
 ```
 
 このサンプルは3段×2列で6アイコンを通過します。画像入力は10段×5列固定です。
+
+## 設定ファイル
+
+GUIはexe横（Python版はリポジトリ直下）の `gui-settings.json` を使用します。初期設定テンプレートは `config/gui-settings.json` です。手動編集はアプリを終了してから行い、再起動してください。CLIはこのGUI設定を読み込みません。
+
+| キー | 初期値 | 内容 |
+|---|---|---|
+| `delete_outputs_on_exit` | `true` | 今回の生成物を終了時に削除 |
+| `avoid_repeated` | `false` | 同じコンテンツの連続を禁止 |
+| `exclude_enabled` | `false` | 指定種類の除外を有効にする |
+| `excluded_types` | `[]` | 除外する種類のID。無効化しても選択内容は保持 |
+| `fallback_priority` | `"stage"` | 未到達時の優先順位。`stage`＝到達段階、`count`＝通過数、`none`＝途中経路を返さない |
+| `initial_path_limit` | `20` | 最初に取得する候補数（整数1～1000）。ページを進めると追加取得 |
+
+種類IDは `lumina_route_finder/contents.py` の `CONTENT_NAMES` を参照してください。不正な型・値はその項目の初期値へ戻し、未知の種類IDは除きます。未定義の追加キーは保存時にも保持します。旧出力先の設定を移行する場合は探索設定も引き継ぎ、有効な新設定があれば新設定を優先します。
+
+ソルバーの直接呼び出しは互換性のため `fallback_priority=None` が既定です。途中経路を求める場合は `stage` または `count` を渡してください。GUI・CLIは到達段階優先が既定です。
 
 ## テスト
 

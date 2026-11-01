@@ -371,7 +371,7 @@ class GuiTests(unittest.TestCase):
         with patch('lumina_route_finder.gui.analyze_file') as analyze:
             entered=threading.Event();release=threading.Event()
             def delayed(source,root,limit,region,on_created,**options):
-                self.assertEqual(options,{'avoid_repeated':True,'excluded_types':('boss_mutation',)})
+                self.assertEqual(options,{'avoid_repeated':True,'excluded_types':('boss_mutation',),'fallback_priority':'stage'})
                 destination=Path(root)/'unpolled'
                 destination.mkdir(parents=True)
                 on_created(destination)

@@ -1,3 +1,8 @@
 {
-  "delete_outputs_on_exit": true
+  "delete_outputs_on_exit": true,
+  "avoid_repeated": false,
+  "exclude_enabled": false,
+  "excluded_types": [],
+  "fallback_priority": "stage",
+  "initial_path_limit": 20
 }

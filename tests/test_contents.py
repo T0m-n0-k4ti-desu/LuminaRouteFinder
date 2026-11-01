@@ -76,12 +76,21 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(strict['status'],'error')
         self.assertEqual(strict['errors'][0]['code'],'AMBIGUOUS_CONTENT')
 
-    def test_excluded_bottleneck_has_no_path(self):
+    def test_excluded_bottleneck_returns_partial_unless_disabled(self):
         with tempfile.TemporaryDirectory() as temp:
             result=run_image(self.source,Path(temp),excluded_types=['wheel_of_fate'])
-        self.assertEqual(result['status'],'no_path')
-        self.assertEqual(result['paths'],[])
-        self.assertIsNone(result['max_count'])
+            self.assertTrue((Path(temp)/'route.png').exists())
+            strict=run_image(self.source,Path(temp)/'strict',excluded_types=['wheel_of_fate'],fallback_priority=None)
+        self.assertEqual(result['status'],'partial')
+        self.assertFalse(result['goal_reached'])
+        self.assertLess(result['reached_stage'],10)
+        self.assertGreater(result['max_count'],0)
+        for path in result['paths']:
+            self.assertEqual(path[-1][0],result['reached_stage'])
+            self.assertTrue(all(EXPECTED[r-1][c-1]!='wheel_of_fate' for r,c in path))
+        self.assertEqual(strict['status'],'no_path')
+        self.assertEqual(strict['paths'],[])
+        self.assertIsNone(strict['max_count'])
 
     def test_filters_alone_and_combined(self):
         for repeat, excluded in [(True,()),(False,('boss_mutation',)),(True,('boss_mutation',))]:

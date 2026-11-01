@@ -2,12 +2,16 @@
 from collections import defaultdict
 
 
-def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False):
+def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False, fallback_priority=None):
     """Return optimal paths; horizontal travel is bidirectional, upward travel forbidden.
 
     Keep exact optimal path count, but materialize at most ``limit`` examples.
-    Nodes are (zero-based row, column) tuples.
+    Nodes are (zero-based row, column) tuples. With fallback enabled, a goal
+    route always wins; only if none exists rank partial routes by stage or count.
+    ``reached_stage`` is one-based, including the starting stage.
     """
+    if fallback_priority not in (None,'stage','count'):
+        raise ValueError('fallback_priority must be stage, count or None')
     if limit < 1:
         raise ValueError('limit must be positive')
     nodes = set(map(tuple, nodes))
@@ -40,6 +44,9 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
             raise ValueError('edges must be horizontal or one row downward')
     # state = (best length, exact count, bounded example paths)
     states = {n: (0, 1, [[]]) for n in sorted(nodes) if n[0] == 0 and n not in blocked}
+    partial_key=None
+    partial_winners=[]
+    reached_stage=None
     for row in rows:
         ends = {}
         def visit(path, previous):
@@ -56,6 +63,13 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
                     visit(path + [nxt], previous)
         for start, previous in sorted(states.items()):
             visit([start], previous)
+        if ends and fallback_priority is not None:
+            length=max(v[0] for v in ends.values())
+            key=(row,length) if fallback_priority=='stage' else (length,row)
+            if partial_key is None or key>partial_key:
+                partial_key=key
+                partial_winners=[v for _,v in sorted(ends.items()) if v[0]==length]
+                reached_stage=row+1
         if row == rows[-1]:
             break
         states = {}
@@ -66,11 +80,19 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
                     states[nxt] = value
                 elif value[0] == old[0]:
                     states[nxt] = (old[0], old[1] + value[1], (old[2] + value[2])[:limit])
-    if not ends:
+    goal_reached=bool(ends)
+    if goal_reached:
+        best=max(v[0] for v in ends.values())
+        winners=[v for _,v in sorted(ends.items()) if v[0]==best]
+        reached_stage=rows[-1]+1
+    elif partial_winners:
+        winners=partial_winners
+        best=winners[0][0]
+    else:
         return {'status': 'no_path', 'max_count': None, 'paths': [], 'optimal_path_count': 0}
-    best = max(v[0] for v in ends.values())
-    winners = [v for _, v in sorted(ends.items()) if v[0] == best]
-    paths = [path for v in winners for path in v[2]][:limit]
-    count = sum(v[1] for v in winners)
-    return {'status': 'ok', 'max_count': best, 'paths': paths,
-            'optimal_path_count': count, 'paths_truncated': count > len(paths)}
+    paths=[path for v in winners for path in v[2]][:limit]
+    count=sum(v[1] for v in winners)
+    return {'status':'ok' if goal_reached else 'partial','max_count':best,'paths':paths,
+            'optimal_path_count':count,'paths_truncated':count>len(paths),
+            'goal_reached':goal_reached,'reached_stage':reached_stage,
+            'fallback_priority':fallback_priority}
