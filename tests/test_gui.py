@@ -61,6 +61,20 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.app.busy,'Analysis did not complete')
         self.root.update()
 
+    def test_long_details_scroll_to_end_and_new_result_resets_to_top(self):
+        self.app.set_details('\n'.join(f'Route step {i}' for i in range(500)))
+        self.root.update_idletasks()
+        command=self.root.tk.splitlist(self.app.details_scroll.cget('command'))
+        self.root.tk.call(*command,'moveto',1)
+        self.root.update_idletasks()
+        self.assertGreater(self.app.details.yview()[0],0)
+        self.assertAlmostEqual(self.app.details.yview()[1],1)
+        self.assertIn('Route step 499',self.app.details.get('1.0','end'))
+        self.assertEqual(str(self.app.details.cget('state')),'disabled')
+        self.app.set_details('New result')
+        self.root.update_idletasks()
+        self.assertEqual(self.app.details.yview()[0],0)
+
     def test_drop_parses_spaces_and_rejects_multiple_files(self):
         path=str(Path(self.tmp.name)/'日本語 folder'/'board image.jpg')
         self.app.on_drop(SimpleNamespace(data='{'+path+'}'))

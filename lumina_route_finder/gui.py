@@ -235,9 +235,16 @@ class Application:
         sidebar.rowconfigure(1,weight=1)
         self.status = ttk.Label(sidebar,text='画像を指定してください',style='Status.TLabel',wraplength=300)
         self.status.grid(row=0,column=0,sticky='ew',pady=(0,12))
-        self.details = tk.Text(sidebar,width=30,wrap='word',font=('Yu Gothic UI',10),
+        detail_frame=ttk.Frame(sidebar)
+        detail_frame.grid(row=1,column=0,sticky='nsew')
+        detail_frame.rowconfigure(0,weight=1)
+        detail_frame.columnconfigure(0,weight=1)
+        self.details = tk.Text(detail_frame,width=30,wrap='word',font=('Yu Gothic UI',10),
                                bg='#f7f9fc',relief='flat',padx=10,pady=10,state='disabled')
-        self.details.grid(row=1,column=0,sticky='nsew')
+        self.details.grid(row=0,column=0,sticky='nsew')
+        self.details_scroll=ttk.Scrollbar(detail_frame,orient='vertical',command=self.details.yview)
+        self.details_scroll.grid(row=0,column=1,sticky='ns')
+        self.details.configure(yscrollcommand=self.details_scroll.set)
         self.open_button = ttk.Button(sidebar,text='結果フォルダーを開く',command=self.open_output,state='disabled')
         self.open_button.grid(row=2,column=0,sticky='ew',pady=(12,0))
         self.output_label = ttk.Label(sidebar,text='',wraplength=300)
@@ -259,6 +266,7 @@ class Application:
         self.details.configure(state='normal')
         self.details.delete('1.0','end')
         self.details.insert('1.0',text)
+        self.details.yview_moveto(0)
         self.details.configure(state='disabled')
 
     def clear_result(self):
