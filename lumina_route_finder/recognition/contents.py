@@ -2,11 +2,11 @@
 from functools import lru_cache
 import cv2
 import numpy as np
-from .paths import ASSETS
-from .errors import ErrorCode, RecognitionError, issue
-from .domain.geometry import center
-from .domain.catalog import CONTENT_NAMES
-from .image_io import read_image
+from ..shared.paths import ASSETS
+from ..shared.errors import ErrorCode, RecognitionError, issue
+from ..domain.geometry import center
+from ..domain.catalog import CONTENT_NAMES
+from ..storage.images import read_image
 
 
 

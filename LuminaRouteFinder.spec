@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 root = Path(SPECPATH)
 a = Analysis(
-    [str(root / 'tools' / 'exe_entry.py')],
+    [str(root / 'tools' / 'build' / 'exe_entry.py')],
     pathex=[str(root)],
     binaries=[],
     datas=collect_data_files('lumina_route_finder', includes=['assets/*.png', 'assets/content_icons/*.png']),

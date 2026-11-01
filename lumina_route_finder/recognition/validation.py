@@ -1,10 +1,10 @@
 """Validate icon structure, selection state and cursor occlusion."""
 import cv2
 import numpy as np
-from .paths import ASSETS
-from .errors import ErrorCode, RecognitionError, issue
-from .image_io import read_image
-from .domain.geometry import center
+from ..shared.paths import ASSETS
+from ..shared.errors import ErrorCode, RecognitionError, issue
+from ..storage.images import read_image
+from ..domain.geometry import center
 
 
 def validate(board, cursor_image=None, cursor_offset=(0,0)):

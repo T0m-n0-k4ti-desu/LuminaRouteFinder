@@ -2,8 +2,9 @@ import copy,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import numpy as np
-from lumina_route_finder.analysis_session import BoardSnapshot,AnalysisCache
-from lumina_route_finder.recognition_review import RecognitionEditor,render_recognition
+from lumina_route_finder.application.session import BoardSnapshot,AnalysisCache
+from lumina_route_finder.application.review import RecognitionEditor
+from lumina_route_finder.rendering.recognition import render_recognition
 from lumina_route_finder.analysis import run_image
 from lumina_route_finder.errors import RecognitionError,issue,ErrorCode
 ROOT=Path(__file__).resolve().parents[1]
@@ -27,7 +28,7 @@ class ReviewTests(unittest.TestCase):
         labels=snap.labels
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
-            with patch('lumina_route_finder.analysis.recognize',side_effect=[error,(snap.board,(0,0),[],snap.diagnostics,1)]) as recognize,patch('lumina_route_finder.contents.classify_contents',return_value=(labels,[])):
+            with patch('lumina_route_finder.analysis.recognize',side_effect=[error,(snap.board,(0,0),[],snap.diagnostics,1)]) as recognize,patch('lumina_route_finder.recognition.contents.classify_contents',return_value=(labels,[])):
                 result=run_image(ROOT/'docs/images/sample_image.jpg',root/'a',cache=cache)
             self.assertEqual(result['status'],'error');self.assertFalse(cache.snapshot.confirmed)
             result=run_image(ROOT/'docs/images/sample_image.jpg',root/'b',cache=cache)

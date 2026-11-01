@@ -4,7 +4,7 @@ from unittest.mock import patch
 import tempfile
 import cv2
 import numpy as np
-from lumina_route_finder.contents import CONTENT_NAMES, classify_contents
+from lumina_route_finder.recognition.contents import CONTENT_NAMES, classify_contents
 from lumina_route_finder.recognize import recognize, read_image, RecognitionError
 from lumina_route_finder.__main__ import run_image
 

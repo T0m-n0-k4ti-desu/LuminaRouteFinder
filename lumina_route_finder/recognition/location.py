@@ -1,11 +1,11 @@
 """Header search and grid-based board location, with original-image coordinates."""
 import cv2
 import numpy as np
-from .paths import ASSETS
-from .errors import ErrorCode, RecognitionError, issue
-from .image_io import read_image
-from .domain.geometry import center
-from .board_validation import validate
+from ..shared.paths import ASSETS
+from ..shared.errors import ErrorCode, RecognitionError, issue
+from ..storage.images import read_image
+from ..domain.geometry import center
+from .validation import validate
 
 
 def locate_native(image):
@@ -37,7 +37,7 @@ def locate_native(image):
 
 def locate_scaled_header(image):
     """Recover a board from its scaled header when lattice detection fails."""
-    from .locate import normalize
+    from .grid import normalize
     template = read_image(ASSETS / 'window.png')
     h, w = template.shape[:2]
     reduction = min(1., 1920 / image.shape[1])
@@ -114,7 +114,7 @@ def visible_icon_count(board):
 
 
 def locate_details(image):
-    from .locate import find_grids, normalize
+    from .grid import find_grids, normalize
     native = None
     try:
         board,origin,score=locate_native(image)

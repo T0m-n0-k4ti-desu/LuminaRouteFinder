@@ -1,9 +1,9 @@
-﻿import io,tempfile,unittest
+import io,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import numpy as np
 from PIL import Image
-from lumina_route_finder.route_export import candidate_image,save_candidate,dib_bytes
+from lumina_route_finder.desktop.route_export import candidate_image,save_candidate,dib_bytes
 class ExportTests(unittest.TestCase):
     def test_export_uses_selected_page_and_highlight_and_survives_cleanup(self):
         from lumina_route_finder.session import SessionOutputs

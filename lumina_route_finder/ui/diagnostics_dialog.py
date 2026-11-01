@@ -6,10 +6,10 @@ import threading
 import tkinter as tk
 from tkinter import ttk,messagebox
 import cv2
-from ..domain.diagnostics import diagnose,compare_relaxations
+from ..domain.diagnostics import diagnose, compare_relaxations
 from ..domain.jobs import AnalysisCancelled
 from ..domain.catalog import CONTENT_NAMES
-from ..diagnostic_render import render_diagnostics
+from ..rendering.diagnostics import render_diagnostics
 
 class DiagnosticsDialog:
     def __init__(self,app):

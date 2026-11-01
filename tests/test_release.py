@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-spec=importlib.util.spec_from_file_location('publish_release',Path(__file__).resolve().parents[1]/'tools/publish_release.py')
+spec=importlib.util.spec_from_file_location('publish_release',Path(__file__).resolve().parents[1]/'tools/release/publish.py')
 release=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 

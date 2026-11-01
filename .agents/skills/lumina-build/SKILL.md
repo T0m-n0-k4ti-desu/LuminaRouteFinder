@@ -5,13 +5,13 @@ description: LuminaRouteFinderのWindows用exeと2ファイル構成のZIPを作
 
 # Windows配布物をビルドする
 
-リポジトリ直下を作業場所とし、docs/DEVELOPMENT.md、requirements-build.txt、tools/build_exe.pyを確認する。WindowsとPython 3.11 x64を用意する。個人のユーザー名・既存venv・外部サンプル画像は前提にしない。
+リポジトリ直下を作業場所とし、docs/DEVELOPMENT.md、requirements-build.txt、tools/build/build_exe.pyを確認する。WindowsとPython 3.11 x64を用意する。個人のユーザー名・既存venv・外部サンプル画像は前提にしない。
 
 ```powershell
 python -m venv .venv-build
 .\.venv-build\Scripts\python.exe -m pip install -r requirements-build.txt
 .\.venv-build\Scripts\python.exe -m unittest discover -s tests -v
-.\.venv-build\Scripts\python.exe tools/build_exe.py
+.\.venv-build\Scripts\python.exe -m tools.build.build_exe
 ```
 
 提供されたsample_image/error_imagesがある場合は、その親をLUMINA_SAMPLE_ROOTに指定して追加検証できる。ない場合の該当テストのskipを区別して報告する。Gitに含むfixturesだけで配布物の起動検証は実行できる。
@@ -27,7 +27,7 @@ python -m venv .venv-build
 ZIPはexeと初期設定gui-settings.jsonだけを直下に含む。個人のgui-settings.jsonやoutputsを同梱しない。
 
 ```powershell
-.\.venv-build\Scripts\python.exe tools/publish_release.py v1.2.3 --dry-run --repo OWNER/REPO
+.\.venv-build\Scripts\python.exe -m tools.release.publish v1.2.3 --dry-run --repo OWNER/REPO
 ```
 
 この例の版番号とリポジトリは実際の対象に置き換える。dry-runでチェックサム・ZIP内exeの一致を確認する。配布物・venv・生成出力はGitに登録しない。ビルド依頼だけではタグpush・リリース公開は行わない。

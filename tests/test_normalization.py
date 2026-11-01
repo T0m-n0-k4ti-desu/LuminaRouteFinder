@@ -23,7 +23,7 @@ class NormalizationTests(unittest.TestCase):
         from unittest.mock import patch
         scale = 1.75
         image = cv2.resize(self.full, None, fx=scale, fy=scale)
-        with patch('lumina_route_finder.locate.find_grids', return_value=[]):
+        with patch('lumina_route_finder.recognition.grid.find_grids', return_value=[]):
             board, origin, edges, _, _ = recognize(image)
         self.assertEqual(board.shape, (500, 260, 3))
         self.assertEqual(set(edges), self.expected)

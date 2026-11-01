@@ -6,8 +6,8 @@ nothing about solving, output files, settings or worker threads.
 import base64
 import tkinter as tk
 import cv2
-from ..errors import ErrorCode
-from ..error_messages import error_message
+from ..shared.errors import ErrorCode
+from ..shared.messages import error_message
 
 
 class ImagePreview:

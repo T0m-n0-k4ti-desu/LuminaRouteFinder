@@ -9,3 +9,6 @@ dist/
 .venv-build/
 
 /gui-settings.json
+
+!tools/build/
+!tools/build/*.py

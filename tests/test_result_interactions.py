@@ -21,7 +21,7 @@ class InteractionTests(unittest.TestCase):
                 target=Path(temp)/'export.png'
                 with patch('lumina_route_finder.ui.controller.filedialog.asksaveasfilename',return_value=str(target)):app.save_candidate()
                 self.assertTrue(np.array_equal(read_image(target),app.candidate_image()))
-                with patch('lumina_route_finder.route_export.copy_image') as copy:
+                with patch('lumina_route_finder.desktop.route_export.copy_image') as copy:
                     app.copy_candidate();self.assertTrue(np.array_equal(copy.call_args.args[0],app.candidate_image()))
                 app.show_page(0);self.assertIsNone(app.selected_step)
             finally:root.update_idletasks();app.close()

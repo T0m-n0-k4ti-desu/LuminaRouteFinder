@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import zipfile
 
-spec=importlib.util.spec_from_file_location('package_release',Path(__file__).resolve().parents[1]/'tools/package_release.py')
+spec=importlib.util.spec_from_file_location('package_release',Path(__file__).resolve().parents[1]/'tools/release/package.py')
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 

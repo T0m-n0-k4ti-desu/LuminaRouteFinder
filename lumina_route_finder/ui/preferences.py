@@ -3,7 +3,7 @@ import math
 import tkinter as tk
 from tkinter import ttk, messagebox
 from ..domain.catalog import CONTENT_NAMES
-from ..settings import DEFAULT_SETTINGS,normalize_search
+from ..storage.settings import DEFAULT_SETTINGS, normalize_search
 from .options import FALLBACK_CHOICES
 
 OBJECTIVES={'通過数最大':'count','重み合計最大':'weight','通過数優先・同数時に重み':'count_then_weight'}

@@ -13,7 +13,7 @@ from tkinterdnd2 import TkinterDnD
 from lumina_route_finder.solver import solve
 from lumina_route_finder.gui import Application,describe_result
 from lumina_route_finder.session import load_settings,save_settings,migrate_cleanup_setting,save_cleanup_setting
-from lumina_route_finder.contents import CONTENT_NAMES
+from lumina_route_finder.recognition.contents import CONTENT_NAMES
 
 REPO=Path(__file__).resolve().parents[1]
 
@@ -178,7 +178,7 @@ class PartialGuiTests(unittest.TestCase):
         self.app.view.path.set(str(REPO/'docs/images/sample_image.jpg'))
         self.app.view.fallback_priority.set('通過アイコン数を優先')
         self.app.options_changed()
-        with patch('lumina_route_finder.analysis.recognize',return_value=(board,(0,0),[],[],1)),patch('lumina_route_finder.contents.classify_contents',return_value=(labels,[])):
+        with patch('lumina_route_finder.analysis.recognize',return_value=(board,(0,0),[],[],1)),patch('lumina_route_finder.recognition.contents.classify_contents',return_value=(labels,[])):
             self.app.initial_path_limit=1
             self.app.start();self.wait()
             self.assertEqual(len(self.app.result["paths"]),1)

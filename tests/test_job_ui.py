@@ -1,4 +1,4 @@
-﻿import tempfile,unittest
+import tempfile,unittest
 from pathlib import Path
 import tkinter as tk
 from tkinterdnd2 import TkinterDnD

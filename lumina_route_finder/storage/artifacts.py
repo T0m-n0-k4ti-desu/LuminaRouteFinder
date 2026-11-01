@@ -1,9 +1,9 @@
 """Write the stable JSON/PNG analysis artifacts."""
 import json
 import cv2
-from .domain.geometry import center
-from .image_io import write_image
-from .render import render_route
+from ..domain.geometry import center
+from .images import write_image
+from ..rendering.routes import render_route
 
 
 def write_analysis_artifacts(destination, board, edges, diagnostics, solved):

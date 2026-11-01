@@ -1,84 +1,64 @@
 # コード構成と責務
 
-このアプリは、純粋な探索処理を中心に置くレイヤード構成と、GUIのView／Controller分離を採用しています。クリーンアーキテクチャの依存方向を参考にしていますが、全処理にInterfaceやRepositoryを置く構成にはしていません。解析の実行部分が具体的な画像・ファイル処理を組み合わせる、Functional Core / Imperative Shellの構成です。
+実装は機能ごとのパッケージに分けています。新しいコードは互換窓口ではなく、以下の実装モジュールを参照してください。
 
-## 依存方向
+```text
+lumina_route_finder/
+  domain/       探索、評価、コンテンツ定義、盤面座標
+  application/  解析の組み立て、認識の再利用、手動補正、CLI
+  recognition/  盤面位置、格子、接続線、種類の認識、画像検証
+  rendering/    経路・認識確認・未到達診断の画像描画
+  storage/      画像・結果・設定の入出力、今回の出力管理
+  desktop/      クリップボード、候補の保存・コピー
+  ui/           Tk画面、操作、プレビュー、設定ダイアログ
+  shared/       エラー定義、メッセージ、同梱データのパス
+  assets/       同梱する認識テンプレート
 
-```mermaid
-flowchart TD
-    CLI[cli.py: 引数・バッチ処理] --> Analysis[analysis.py: 解析ユースケース]
-    Controller[ui/controller.py: 操作・非同期解析・終了] --> Analysis
-    Controller --> View[ui/view.py: ウィジェット構築]
-    Controller --> Preview[ui/preview.py: 画像表示・ドラッグ・ROI]
-    Controller --> Presenter[ui/presentation.py: 日本語の結果文]
-    Controller --> Settings[settings.py: 設定保存・移行]
-    Controller --> Session[session.py: セッション出力管理]
-    Analysis --> Recognition[位置検出・検証・接続認識・種類判別]
-    Analysis --> Artifacts[artifacts.py / image_io.py: ファイル出力・入力]
-    Analysis --> Domain[domain/: 探索・座標・種類名]
-    Recognition --> Domain
-    Artifacts --> Domain
-    Presenter --> Domain
-    Settings --> Domain
+tools/
+  assets/       テンプレート作成
+  build/        exeビルド、exe・ZIPの動作確認
+  release/      ZIP作成、チェックサム検証、リリース公開
 ```
-
-`domain/` はGUI、OpenCV、ファイル保存に依存しません。設定の検証と結果文の整形も、TkやOpenCVを読み込まず使えます。CLIと解析ユースケースはGUIに依存しません。これらの境界は `tests/test_architecture.py` で確認します。
 
 ## 変更する場所
 
-| 変更内容 | 主な変更先 |
+| 変更内容 | 主な実装 |
 |---|---|
-| 経路の制約・最長経路・途中経路 | `lumina_route_finder/domain/solver.py` |
-| コンテンツIDと名前 | `lumina_route_finder/domain/catalog.py` |
-| 盤面の座標・経路の出力座標 | `lumina_route_finder/domain/geometry.py` |
-| 画像解析の実行順序、範囲指定、探索条件 | `lumina_route_finder/analysis.py` |
-| CLIの引数・入力列挙 | `lumina_route_finder/cli.py` |
-| JSON・診断画像・経路画像の保存 | `lumina_route_finder/artifacts.py`、`render.py`、`image_io.py` |
-| タイトルと格子による位置検出 | `lumina_route_finder/board_location.py`、`locate.py` |
-| アイコン欠損・選択・カーソルの検査 | `lumina_route_finder/board_validation.py` |
-| 接続線の判定 | `lumina_route_finder/recognize.py` |
-| コンテンツの画像照合 | `lumina_route_finder/contents.py` |
-| 画面配置・ウィジェット・イベント接続 | `lumina_route_finder/ui/view.py` |
-| 拡大・スクロール・ドラッグ・範囲選択の座標変換 | `lumina_route_finder/ui/preview.py` |
-| 表示文・エラー文・通過順 | `lumina_route_finder/ui/presentation.py` |
-| エラーコード・共通例外・失敗結果への正規化 | `lumina_route_finder/errors.py` |
-| 利用者向けエラー文と重複排除 | `lumina_route_finder/error_messages.py` |
-| GUI入力・ワーカー・候補切替・終了待機 | `lumina_route_finder/ui/controller.py` |
-| 設定ファイルの検証・保存・移行 | `lumina_route_finder/settings.py` |
-| 今回の出力登録・終了時削除 | `lumina_route_finder/session.py` |
+| 最大経路・途中経路・重み評価 | `domain/solver.py` |
+| 種類のID・名前、盤面座標と接続候補 | `domain/catalog.py`、`domain/geometry.py` |
+| 解析手順・範囲指定・条件比較 | `application/analysis.py` |
+| 認識結果のキャッシュ・再探索 | `application/session.py` |
+| 認識結果の手動補正・Undo | `application/review.py` |
+| CLI引数 | `application/cli.py` |
+| 盤面位置と格子 | `recognition/location.py`、`recognition/grid.py` |
+| 接続線、種類、欠損・遮蔽の検証 | `recognition/connections.py`、`contents.py`、`validation.py` |
+| 経路・診断・認識確認の描画 | `rendering/routes.py`、`diagnostics.py`、`recognition.py` |
+| 設定の検証・保存・移行 | `storage/settings.py` |
+| 今回の出力登録・終了時削除 | `storage/session_outputs.py` |
+| 画像・JSONなどの保存 | `storage/images.py`、`artifacts.py`、`file_safety.py` |
+| 貼り付け・候補保存とコピー | `desktop/clipboard.py`、`route_export.py` |
+| 画面構築・操作・画像表示 | `ui/view.py`、`controller.py`、`preview.py` |
+| 表示文、設定画面 | `ui/presentation.py`、`preferences.py` |
+| エラーコード・共通例外・日本語文 | `shared/errors.py`、`messages.py` |
 
-## GUIの分担
+## 依存関係
 
-`ApplicationView` はウィジェットを構築し、操作をControllerのコールバックへ接続します。解析やファイル操作は実行しません。
+`domain/` はOpenCV、Tk、ファイル保存に依存しません。`application/` が認識・探索・描画・保存を組み合わせ、GUIとCLIから共用します。解析とCLIはGUIを読み込みません。手動補正のデータ操作も画像描画から分離しています。
 
-`ImagePreview` は表示画像とカメラ状態を所有します。操作可能かどうかをコールバックで受け取り、範囲確定時には矩形をControllerへ通知します。探索・設定保存・解析スレッドについては知りません。
+GUIの `ApplicationView` は画面構築、`ImagePreview` は画像表示と座標変換、`Application` は操作と非同期処理を担当します。Tkの操作は主スレッドで行い、解析ワーカーから結果をキューで受け取ります。境界は `tests/test_architecture.py` で検証します。
 
-`Application` はViewとPreviewを組み立てます。Tkの操作は主スレッドで行い、ワーカーは共通の解析ユースケースを呼んで結果をキューへ渡します。解析出力の生成直後の登録と、終了時の完了待機は維持しています。
+## 起動口と互換性
 
-## 既存の起動口と互換性
+`python -m lumina_route_finder`、`python -m lumina_route_finder.gui`、`launch_gui.pyw` は従来どおり使えます。
 
-- `python -m lumina_route_finder` と `python -m lumina_route_finder.gui` は同じままです。
-- `gui.py` は `Application`、`main`、`describe_result`、`analyze_file` への公開窓口です。
-- `__main__.py` の `run_image`、`write_image`、`export_solution` は引き続きインポートできます。
-- `solver.py` は純粋な探索処理への互換インポートです。新しい内部コードは `domain.solver` を参照します。
-- `session.py` からの既存の設定関数のインポートは維持します。実装は `settings.py` にあります。
-- `recognize.py` からの位置検出・検証・画像読込関数の既存インポートも維持します。
-- exeの診断起動が利用する `Application.path`、`status`、`image`、`region` と解析・終了操作は維持しています。
+ルートの `analysis.py`、`cli.py`、`recognize.py`、`settings.py`、`session.py`、`image_io.py`、`errors.py`、`error_messages.py` は既存の公開インポートを維持する窓口です。`gui.py` と `solver.py` も公開窓口として残します。内部コードは機能別パッケージを直接参照します。テストで関数を差し替える場合も、実際に使用するモジュール側を対象にしてください。
 
-新しいコードは互換窓口ではなく、責務を持つ実装モジュールを直接参照してください。GUI内部のウィジェットは `app.view`、プレビュー状態・操作は `app.preview` にあります。テストで差し替える関数も、その関数を実際に使うモジュールで差し替えます。
+開発用コマンドは `python -m tools.build.build_exe`、`python -m tools.assets.build_templates`、`python -m tools.release.publish` に整理しています。従来の `python tools/build_exe.py` なども互換ランチャーとして使用できます。
 
-## 変更の確認
+## データとエラー
 
-既存のGUI・CLI・認識・探索・設定・配布テストを引き続き実行します。コードの移動だけで画面の文言、探索条件、設定形式、出力ファイルを変更しないようにします。今回の分割では、同梱画像による通常解析・条件付き解析・範囲指定のJSON／PNG成果物が分割前とバイト単位で一致し、不正画像のエラー結果も一致することを確認しました。
+認識用データは引き続き `lumina_route_finder/assets/`、Python版設定はリポジトリ直下、exe版設定はexe横です。設定をoutputsへ戻す変更はありません。
 
-複数の機能を同時に変更する際は、上の表で主な変更先を分けてください。新しい画像操作でViewのレイアウトや探索処理まで変更する、といった責務の混在を避けます。
+`shared.errors` がエラーコードと共通例外を定義し、`shared.messages` が利用者向け文を整形します。CLIとGUIの処理境界で例外を共通結果に変換します。探索の `partial` と `no_path` はエラー例外に変換しません。
 
-## エラーの扱い
-
-`errors.py` の `ErrorCode` がコードを定義し、`issue()` が既存の `code`／`message`／任意の `board_box` 形式を作ります。Enumを渡してもJSONのコードは従来と同じ文字列です。既知の業務エラーは `ApplicationError` で表現し、画像認識の公開例外 `RecognitionError` はそのサブクラスとして維持します。画像や原点などの診断用情報も保持します。
-
-`error_messages.py` は利用者向け日本語メッセージを一元管理します。GUIの結果表示、入力検証、クリップボード、設定、出力の案内に同じ整形関数を使います。診断用の詳細は `message` に残し、未知のコードは診断文へフォールバックします。メッセージの翻訳や重複排除は、認識処理やTkウィジェットに置きません。
-
-CLIとGUIワーカーの境界では `failure_issues()`／`error_result()` で例外を共通形式にします。既知の `ApplicationError` のコードは保持し、出力操作でのOSエラーは `OUTPUT_WRITE_ERROR`、予期しない障害は `ANALYSIS_FAILED` に分けます。GUIは日本語文へ整形し、CLIは従来の機械可読コードを表示します。保存そのものが失敗した場合、結果ファイルを保存できたことにはしません。
-
-探索の `partial`／`no_path` はエラー例外に変換しません。純粋な探索APIの不正な引数など、プログラマー向けの検証は引き続き `ValueError` です。予期しない例外を業務エラーに偽装して握りつぶす用途には使いません。
+配置変更では探索条件・設定形式・出力形式を変更しません。通常・条件付き・範囲指定・不正画像の4ケースについて、変更前後のJSONとPNGがバイト単位で一致することを確認しています。
