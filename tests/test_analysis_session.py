@@ -1,4 +1,4 @@
-﻿import tempfile,threading,unittest
+import tempfile,threading,unittest
 from pathlib import Path
 from unittest.mock import patch
 from lumina_route_finder.analysis import run_image
@@ -25,6 +25,13 @@ class SessionTests(unittest.TestCase):
                 reused=run_image(source,root/'e',cache=cache,region=(715,327,975,827))
                 self.assertTrue((root/'e/input.png').is_file())
                 self.assertTrue(reused['recognition_reused'])
+    def test_hash_input_read_error_keeps_input_error_code(self):
+        cache=AnalysisCache()
+        with tempfile.TemporaryDirectory() as temp,patch.object(cache,'signature',side_effect=PermissionError('cannot read')):
+            result=run_image(ROOT/'docs/images/sample_image.jpg',Path(temp),cache=cache)
+        self.assertEqual(result['status'],'error')
+        self.assertEqual(result['errors'][0]['code'],'INPUT_READ_ERROR')
+
     def test_cancel_does_not_cache_unfinished_recognition_and_can_restart(self):
         event=threading.Event();cache=AnalysisCache()
         with tempfile.TemporaryDirectory() as temp:

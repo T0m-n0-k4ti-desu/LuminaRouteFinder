@@ -1,4 +1,4 @@
-﻿import tempfile,unittest
+import tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import tkinter as tk
@@ -28,5 +28,5 @@ class PreferencesTests(unittest.TestCase):
                 self.assertEqual(app.initial_path_limit,previous)
                 with patch('lumina_route_finder.ui.preferences.messagebox.askyesno',return_value=True):dialog.delete_preset()
                 self.assertNotIn('test',load_settings(app.settings_path)['presets'])
-            finally:app.close()
+            finally:root.update_idletasks();app.close()
 if __name__=='__main__':unittest.main()

@@ -9,7 +9,7 @@ class RecognitionEditor:
     def __init__(self,snapshot,original=None):
         self.snapshot=deepcopy(snapshot);self.original=deepcopy(original if original is not None else snapshot);self.history=[]
     def remember(self):
-        self.history.append(deepcopy(self.snapshot));self.history=self.history[-20:]
+        self.history.append(deepcopy(self.snapshot,{id(self.snapshot.board):self.snapshot.board,id(self.snapshot.input_crop):self.snapshot.input_crop}));self.history=self.history[-20:]
     def set_label(self,node,kind):
         node=tuple(node)
         if node not in self.snapshot.labels or (kind is not None and kind not in CONTENT_NAMES):raise ValueError('Invalid node or content type')

@@ -20,6 +20,7 @@ if '--smoke-test' in sys.argv:
     parser.add_argument('--region-test',action='store_true')
     parser.add_argument('--scaled-header-test',action='store_true')
     parser.add_argument('--portable-test',action='store_true')
+    parser.add_argument('--features-test',action='store_true')
     args=parser.parse_args()
     root=TkinterDnD.Tk()
     root.withdraw()
@@ -40,10 +41,22 @@ if '--smoke-test' in sys.argv:
         locator.find_grids=lambda image: []
     app.start()
     exit_code=[1]
+    feature_checked=[False]
     def finish():
         if app.busy:
             root.after(100,finish)
             return
+        if args.features_test and not feature_checked[0]:
+            try:
+                from frozen_features import check_features
+                check_features(app,args.report)
+                feature_checked[0]=True
+                root.after(100,finish)
+                return
+            except Exception as exc:
+                args.report.parent.mkdir(parents=True,exist_ok=True)
+                args.report.write_text(json.dumps({'feature_error':str(exc)}),encoding='utf-8')
+                app.close();return
         result={'title':app.status.cget('text'),'has_preview':app.image is not None,
                 'status': app.result.get('status') if app.result else 'failed',
                 'max_count':app.result.get('max_count') if app.result else None,
@@ -52,6 +65,8 @@ if '--smoke-test' in sys.argv:
                 'input':app.result.get('input') if app.result else None,
                 'cleanup_enabled':app.delete_outputs.get(),
                 'settings_path':str(app.settings_path),
+                'feature_checks':feature_checked[0],
+                'recognition_reused':app.result.get('recognition_reused',False) if app.result else False,
                 'tkdnd':root.tk.call('package','present','tkdnd')}
         args.report.parent.mkdir(parents=True,exist_ok=True)
         args.report.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

@@ -1,4 +1,4 @@
-﻿import random,unittest
+import random,unittest
 from lumina_route_finder.domain.solver import solve
 class WeightTests(unittest.TestCase):
     def test_objectives_match_exhaustive_paths_including_negative_weights(self):
@@ -31,6 +31,13 @@ class WeightTests(unittest.TestCase):
                     self.assertEqual({tuple(p) for p in result['paths']},expected)
                     self.assertEqual(result['optimal_path_count'],len(expected))
                     self.assertTrue(all(len(p)==result['max_count'] for p in result['paths']))
+    def test_decimal_weights_have_exact_ties(self):
+        nodes=[(0,0),(0,1),(1,0),(1,1)]
+        edges=[((0,0),(1,0)),((0,1),(1,1))]
+        labels={(0,0):'a',(1,0):'b',(0,1):'c',(1,1):'d'}
+        result=solve(nodes,edges,node_types=labels,objective='weight',weights={'a':.1,'b':.2,'c':.3,'d':0})
+        self.assertEqual(result['optimal_path_count'],2)
+
     def test_invalid_weights(self):
         for value in (float('nan'),float('inf'),True,1000001):
             with self.assertRaises(ValueError):solve([(0,0)],[],node_types={(0,0):'a'},objective='weight',weights={'a':value})
