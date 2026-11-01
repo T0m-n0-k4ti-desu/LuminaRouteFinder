@@ -26,7 +26,8 @@ def test_executable():
            ('crop',ROOT/'tests/fixtures/board_crop.jpg',18),
            ('clipboard',ROOT/'tests/fixtures/board_crop.jpg',18),
            ('region',ROOT/'docs/images/sample_image.jpg',14),
-           ('scaled_header',scaled_source,14)]
+           ('scaled_header',scaled_source,14),
+           ('features',ROOT/'docs/images/sample_image.jpg',14)]
     for name,source,expected in cases:
         report=ROOT/f'outputs/exe-smoke/{name}_report.json'
         report.unlink(missing_ok=True)
@@ -34,6 +35,7 @@ def test_executable():
         if name=='clipboard':command.append('--clipboard-test')
         if name=='region':command.append('--region-test')
         if name=='scaled_header':command.append('--scaled-header-test')
+        if name=='features':command.append('--features-test')
         subprocess.run(command,
                        check=True,timeout=90,startupinfo=startup)
         result=json.loads(report.read_text(encoding='utf-8'))
@@ -45,6 +47,8 @@ def test_executable():
             raise RuntimeError('Frozen GUI did not clean its clipboard input on exit')
         if name=='region' and result['input_region'] != [715,327,975,827]:
             raise RuntimeError('Frozen GUI did not use the selected region')
+        if name=='features' and (not result['feature_checks'] or not result['recognition_reused']):
+            raise RuntimeError('Frozen feature integration or cache reuse failed')
         print(f'Frozen GUI: {name}, TkDnD and preview verified ({expected} icons).',flush=True)
 
 

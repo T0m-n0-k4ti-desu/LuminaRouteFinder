@@ -1,8 +1,10 @@
 """Longest simple paths on a downward layered board."""
 from collections import defaultdict
+import math
+from fractions import Fraction
 
 
-def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False, fallback_priority=None, cancel=None):
+def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_repeated=False, fallback_priority=None, cancel=None, objective='count', weights=None):
     """Return optimal paths; horizontal travel is bidirectional, upward travel forbidden.
 
     Keep exact optimal path count, but materialize at most ``limit`` examples.
@@ -10,10 +12,14 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
     route always wins; only if none exists rank partial routes by stage or count.
     ``reached_stage`` is one-based, including the starting stage.
     """
+    if objective not in ('count','weight','count_then_weight'):raise ValueError('invalid objective')
+    weights=dict(weights or {})
+    if any(type(v) not in (int,float) or not math.isfinite(v) or abs(v)>1000000 for v in weights.values()):raise ValueError('invalid weights')
     if fallback_priority not in (None,'stage','count'):
         raise ValueError('fallback_priority must be stage, count or None')
     if limit < 1:
         raise ValueError('limit must be positive')
+    weights={k:Fraction(str(v)) for k,v in weights.items()}
     nodes = set(map(tuple, nodes))
     if not nodes:
         return {'status': 'no_path', 'max_count': None, 'paths': [], 'optimal_path_count': 0}
@@ -21,7 +27,7 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
     if rows != list(range(rows[-1] + 1)):
         raise ValueError('rows must be contiguous from zero')
     excluded_types = set(excluded_types)
-    if excluded_types or avoid_repeated:
+    if excluded_types or avoid_repeated or objective!='count':
         if node_types is None or any(n not in node_types for n in nodes):
             raise ValueError('content types are required for every node when filtering')
     blocked = {n for n in nodes if node_types is not None and node_types.get(n) in excluded_types}
@@ -42,8 +48,14 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
             down[u].add(v)
         else:
             raise ValueError('edges must be horizontal or one row downward')
-    # state = (best length, exact count, bounded example paths)
-    states = {n: (0, 1, [[]]) for n in sorted(nodes) if n[0] == 0 and n not in blocked}
+    def metric(path):
+        length=len(path)
+        if objective=='count':return length,0
+        score=sum(weights.get(node_types[n],1) for n in path) if node_types is not None else length
+        return (score,length) if objective=='weight' else (length,score if objective=='count_then_weight' else 0)
+    def length_of(value):return value[0][1] if objective=='weight' else value[0][0]
+    # state = (best ranking tuple, exact count, bounded example paths)
+    states = {n: ((0,0), 1, [[]]) for n in sorted(nodes) if n[0] == 0 and n not in blocked}
     partial_key=None
     partial_winners=[]
     reached_stage=None
@@ -54,7 +66,8 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
                 from .jobs import AnalysisCancelled
                 raise AnalysisCancelled()
             n = path[-1]
-            length = previous[0] + len(path)
+            added=metric(path)
+            length=tuple(a+b for a,b in zip(previous[0],added))
             examples = [prefix + path for prefix in previous[2]][:limit]
             current = ends.get(n)
             if current is None or length > current[0]:
@@ -95,7 +108,9 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
         return {'status': 'no_path', 'max_count': None, 'paths': [], 'optimal_path_count': 0}
     paths=[path for v in winners for path in v[2]][:limit]
     count=sum(v[1] for v in winners)
-    return {'status':'ok' if goal_reached else 'partial','max_count':best,'paths':paths,
+    path_weights=[sum(weights.get(node_types[n],1) for n in path) if node_types else len(path) for path in paths]
+    return {'status':'ok' if goal_reached else 'partial','max_count':length_of(winners[0]),'paths':paths,
+            'objective':objective,'best_metric':[float(v) if isinstance(v,Fraction) else v for v in best],'path_weights':[float(v) for v in path_weights],
             'optimal_path_count':count,'paths_truncated':count>len(paths),
             'goal_reached':goal_reached,'reached_stage':reached_stage,
             'fallback_priority':fallback_priority}

@@ -1,5 +1,6 @@
 """GUI configuration storage, validation and legacy migration."""
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -7,8 +8,10 @@ import tempfile
 from .file_safety import is_link
 
 
+SEARCH_KEYS=('avoid_repeated','exclude_enabled','excluded_types','fallback_priority','objective','weights')
+
 DEFAULT_SETTINGS={'delete_outputs_on_exit':True,'avoid_repeated':False,'exclude_enabled':False,
-                  'excluded_types':[],'fallback_priority':'stage','initial_path_limit':20}
+                  'excluded_types':[],'fallback_priority':'stage','initial_path_limit':20,'objective':'count','weights':{},'presets':{}}
 
 
 def read_settings_document(path):
@@ -31,6 +34,13 @@ def load_settings(path):
     if type(limit) is int and 1<=limit<=1000:result['initial_path_limit']=limit
     if isinstance(raw.get('excluded_types'),list):
         result['excluded_types']=[key for key in CONTENT_NAMES if key in raw['excluded_types']]
+    if raw.get('objective') in ('count','weight','count_then_weight'):result['objective']=raw['objective']
+    result['weights']={k:v for k,v in raw.get('weights',{}).items() if k in CONTENT_NAMES and type(v) in (int,float) and math.isfinite(v) and abs(v)<=1000000} if isinstance(raw.get('weights'),dict) else {}
+    result['presets']={}
+    if isinstance(raw.get('presets'),dict):
+        for name,values in raw['presets'].items():
+            if isinstance(name,str) and name.strip() and len(name)<=80 and isinstance(values,dict):
+                result['presets'][name]={k:v for k,v in values.items() if k in SEARCH_KEYS}
     return result
 
 
@@ -90,3 +100,17 @@ def _write_settings(path,document):
         Path(name).unlink(missing_ok=True)
 
 
+
+
+def normalize_search(values):
+    from .domain.catalog import CONTENT_NAMES
+    result={k:DEFAULT_SETTINGS[k] for k in SEARCH_KEYS}
+    for key in ('avoid_repeated','exclude_enabled'):
+        if isinstance(values.get(key),bool):result[key]=values[key]
+    if values.get('fallback_priority') in ('stage','count','none'):result['fallback_priority']=values['fallback_priority']
+    if values.get('objective') in ('count','weight','count_then_weight'):result['objective']=values['objective']
+    raw=values.get('excluded_types',[])
+    result['excluded_types']=[k for k in CONTENT_NAMES if k in raw] if isinstance(raw,list) else []
+    raw=values.get('weights',{})
+    result['weights']={k:v for k,v in raw.items() if k in CONTENT_NAMES and type(v) in (int,float) and math.isfinite(v) and abs(v)<=1000000} if isinstance(raw,dict) else {}
+    return result

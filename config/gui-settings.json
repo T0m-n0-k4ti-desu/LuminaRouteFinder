@@ -4,5 +4,8 @@
   "exclude_enabled": false,
   "excluded_types": [],
   "fallback_priority": "stage",
-  "initial_path_limit": 20
+  "initial_path_limit": 20,
+  "objective": "count",
+  "weights": {},
+  "presets": {}
 }

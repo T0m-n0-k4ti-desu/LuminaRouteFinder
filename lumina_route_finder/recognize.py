@@ -52,7 +52,7 @@ def edge_score(board, u, v, contrast=None):
     return int(np.count_nonzero(values[pixels] > 16)), len(pixels)
 
 
-def recognize(image):
+def recognize(image, *, allow_uncertain=False):
     from .locate import normalize
     board, origin, header_score, scale = locate_details(image)
     context=normalize(image,origin,scale,margin=40)
@@ -73,8 +73,8 @@ def recognize(image):
             uncertain.append(issue(ErrorCode.AMBIGUOUS_CONNECTION, f'Uncertain connection {u} -> {v}.', (min(x1,x2)-3,min(y1,y2)-3,abs(x2-x1)+6,abs(y2-y1)+6)))
         if present:
             edges.append((u,v))
-    if uncertain:
+    if uncertain and not allow_uncertain:
         raise RecognitionError(uncertain,board,origin)
-    if any(not any(u[0] == r and v[0] == r+1 for u,v in edges) for r in range(9)):
+    if not allow_uncertain and any(not any(u[0] == r and v[0] == r+1 for u,v in edges) for r in range(9)):
         raise RecognitionError([issue(ErrorCode.AMBIGUOUS_CONNECTION,'Missing evidence between rows; complete board cannot be confirmed.')],board,origin)
     return board, origin, edges, diagnostics, header_score

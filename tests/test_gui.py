@@ -374,6 +374,8 @@ class GuiTests(unittest.TestCase):
                 self.assertIs(options.pop('cache'),self.app.analysis_cache)
                 self.assertIs(options.pop('cancel'),self.app.cancel_event)
                 self.assertTrue(callable(options.pop('progress')))
+                self.assertEqual(options.pop('objective'),'count')
+                self.assertEqual(options.pop('weights'),{})
                 self.assertEqual(options,{'avoid_repeated':True,'excluded_types':('boss_mutation',),'fallback_priority':'stage'})
                 destination=Path(root)/'unpolled'
                 destination.mkdir(parents=True)

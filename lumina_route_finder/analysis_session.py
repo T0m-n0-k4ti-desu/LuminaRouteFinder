@@ -21,17 +21,22 @@ class BoardSnapshot:
     score: float
     labels: dict
     content_diagnostics: list
+    confirmed: bool=True
+    pending_edges: list=field(default_factory=list)
     input_crop: object=None
     corrections: list=field(default_factory=list)
 
 
 class AnalysisCache:
     def __init__(self):self.clear()
-    def clear(self):self.key=self.snapshot=self.original=None
+    def clear(self):
+        self.key=self.snapshot=self.original=None;self.revision=getattr(self,'revision',0)+1
+    def update(self,snapshot):
+        self.snapshot=deepcopy(snapshot);self.revision+=1
     def signature(self,source,region):
         source=Path(source).resolve()
         digest=hashlib.sha256(source.read_bytes()).hexdigest()
         return str(source),digest,tuple(region) if region is not None else None
     def get(self,key):return deepcopy(self.snapshot) if self.key==key else None
     def put(self,key,snapshot):
-        self.key=key;self.snapshot=deepcopy(snapshot);self.original=deepcopy(snapshot)
+        self.key=key;self.snapshot=deepcopy(snapshot);self.original=deepcopy(snapshot);self.revision+=1
