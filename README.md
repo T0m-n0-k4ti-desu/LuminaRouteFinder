@@ -247,7 +247,7 @@ python -m venv .venv-build
 
 配布ファイルはGitのソース履歴に入れず、GitHub Releasesの添付ファイルとして公開します。READMEのダウンロードリンクは最新リリースの `LuminaRouteFinder.exe` を参照します。
 
-### ポータブルZIPの構成（このブランチで追加）
+### ポータブルZIPの構成
 
 配布用ZIPには、次の2ファイルだけを直下に格納します。初期設定は `config/gui-settings.json` を使用し、ビルド環境で保存された個人設定は混入させません。
 
@@ -267,4 +267,32 @@ ZIPをフォルダーへ展開し、exeをダブルクリックしてくださ�
 
 Python版では、上記の「exe横」を「リポジトリ直下」と読み替えてください。初期設定ファイルを既存の個人設定へ上書きしないよう、アップデート時は必要に応じてexeだけを差し替えてください。
 
-公開済みリリースは従来のexe単体です。ZIP生成と設定分離はこのブランチで検証し、リリース時にZIPを添付する想定です。ビルドでは、ZIPの内容確認と、展開したexeの解析・設定保存先・終了後のフォルダー構成を自動検証します。
+この変更の導入前に公開したリリースは従来のexe単体です。次回のタグリリースからZIPも添付します。ビルドでは、ZIPの内容確認と、展開したexeの解析・設定保存先・終了後のフォルダー構成を自動検証します。
+
+
+### リリースにexe・ZIP・チェックサムを添付する
+
+`.github/workflows/release.yml` が、`v1.0.2` のような安定版タグ（`v数字.数字` または `v数字.数字.数字`）のpushで動作します。この変更をマージしたコミット以降へ新しいタグを付けてください。
+
+```powershell
+git tag v1.0.2
+git push origin v1.0.2
+```
+
+Windows上でテスト、exe・ZIPのビルド、exe起動とZIP展開後の動作確認を行い、次の3点をGitHub Releasesへ添付します。
+
+- `LuminaRouteFinder.exe`
+- `LuminaRouteFinder-Windows-x64.zip`（exeと初期設定ファイルの2点を格納）
+- `SHA256SUMS.txt`（exeとZIPのSHA-256）
+
+`tools/publish_release.py` はローカルのチェックサム・ZIP内のexe一致を確認し、下書きリリースへアップロードします。サーバー側でも3点のSHA-256を確認してから公開するため、添付処理に失敗した場合は下書きのまま残ります。公開後は [Releases一覧](https://github.com/T0m-n0-k4ti-desu/LuminaRouteFinder/releases) から各配布物を取得できます。
+
+Actions画面の「Build and publish Windows release」から、既存のタグを指定して手動実行することもできます。既存の下書きに同じ内容の添付があれば不足分だけを追加します。内容が異なる添付や公開済みリリースは上書きせず停止します。ビルドし直した結果が既存の下書きと異なる場合は、下書きの内容を確認してから、別の新しいタグでリリースしてください。
+
+ローカルでも、ビルド後に次のコマンドで3点を検証できます。`--dry-run` はGitHubへ接続せず、公開もしません。
+
+```powershell
+python tools/publish_release.py v1.0.2 --dry-run
+```
+
+手動公開する場合は [GitHub CLI](https://cli.github.com/manual/gh_release_create) をインストールし、対象リポジトリへ書き込み可能なアカウントで `gh auth login` を行ったうえで、`--dry-run` を外して実行します。タグは事前にリモートへpushしてください。GitHub Actionsではジョブの `contents: write` 権限と標準の `GITHUB_TOKEN` を使用します。
