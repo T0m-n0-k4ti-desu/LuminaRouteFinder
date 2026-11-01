@@ -29,6 +29,17 @@ class ReleaseTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_cli_decodes_japanese_json_with_non_utf8_system_locale(self):
+        import sys
+        payload={'body':'日本語のリリース情報'}
+        data=json.dumps(payload,ensure_ascii=False).encode('utf-8')
+        child="import sys; sys.stdout.buffer.write(bytes.fromhex("+repr(data.hex())+"))"
+        run=subprocess.run
+        def run_child(args,**kwargs):
+            return run([sys.executable,'-c',child],**kwargs)
+        with patch.object(release.subprocess,'run',side_effect=run_child),patch('subprocess._text_encoding',return_value='cp1252',create=True):
+            self.assertEqual(release.gh(['api','releases'],True),payload)
+
     def test_dry_run_verifies_all_three_without_network(self):
         with patch.object(release,'gh') as gh:
             result=release.publish('v9.9.9','owner/repo',self.folder,True)

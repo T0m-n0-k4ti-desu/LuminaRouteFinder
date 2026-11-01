@@ -47,7 +47,7 @@ def verify_assets(folder):
 
 
 def gh(args,json_result=False):
-    result=subprocess.run(['gh',*args],check=True,text=True,capture_output=True)
+    result=subprocess.run(['gh',*args],check=True,text=True,encoding='utf-8',capture_output=True)
     return json.loads(result.stdout) if json_result else result.stdout.strip()
 
 

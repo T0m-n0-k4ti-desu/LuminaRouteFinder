@@ -44,4 +44,5 @@ jobs:
       - name: Publish verified EXE, ZIP and checksums
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHONUTF8: '1'
         run: python tools/publish_release.py "$env:RELEASE_TAG"
