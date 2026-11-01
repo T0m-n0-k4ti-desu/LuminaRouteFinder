@@ -10,6 +10,40 @@ import threading
 ARTIFACTS={'result.json','board.json','board.png','route.png','recognized.png','error.png','input.png'}
 
 
+DEFAULT_SETTINGS={'delete_outputs_on_exit':True,'avoid_repeated':False,'exclude_enabled':False,
+                  'excluded_types':[],'fallback_priority':'stage','initial_path_limit':20}
+
+
+def read_settings_document(path):
+    try:
+        value=json.loads(Path(path).read_text(encoding='utf-8-sig'))
+        return value if isinstance(value,dict) else {}
+    except (OSError,ValueError,TypeError):
+        return {}
+
+
+def load_settings(path):
+    from .contents import CONTENT_NAMES
+    raw=read_settings_document(path)
+    result=dict(DEFAULT_SETTINGS,excluded_types=[])
+    for key in ('delete_outputs_on_exit','avoid_repeated','exclude_enabled'):
+        if isinstance(raw.get(key),bool):result[key]=raw[key]
+    if raw.get('fallback_priority') in ('stage','count','none'):
+        result['fallback_priority']=raw['fallback_priority']
+    limit=raw.get('initial_path_limit')
+    if type(limit) is int and 1<=limit<=1000:result['initial_path_limit']=limit
+    if isinstance(raw.get('excluded_types'),list):
+        result['excluded_types']=[key for key in CONTENT_NAMES if key in raw['excluded_types']]
+    return result
+
+
+def save_settings(path,values):
+    # Keep unknown keys so a checkbox change cannot erase future extensions.
+    document=read_settings_document(path)
+    document.update(values)
+    _write_settings(path,document)
+
+
 def default_settings_path():
     base=Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]
     return base/'gui-settings.json'
@@ -36,19 +70,23 @@ def migrate_cleanup_setting(path,legacy):
     if previous is None:
         return
     if read_cleanup_setting(path) is None:
-        save_cleanup_setting(path,previous)
+        save_settings(path,dict(read_settings_document(legacy),**load_settings(legacy)))
     # Only remove a valid old settings file once the new file is readable.
     if read_cleanup_setting(path) is not None:
         legacy.unlink()
 
 
 def save_cleanup_setting(path, enabled):
+    save_settings(path,{'delete_outputs_on_exit':bool(enabled)})
+
+
+def _write_settings(path,document):
     path=Path(path)
     path.parent.mkdir(parents=True,exist_ok=True)
     fd,name=tempfile.mkstemp(prefix='.gui-settings-',suffix='.tmp',dir=path.parent)
     try:
         with os.fdopen(fd,'w',encoding='utf-8') as stream:
-            json.dump({'delete_outputs_on_exit':bool(enabled)},stream,indent=2)
+            json.dump(document,stream,indent=2)
             stream.write('\n')
         os.replace(name,path)
     finally:

@@ -22,7 +22,7 @@ def export_solution(result):
     return result
 
 
-def run_image(source, destination, limit=20, region=None, *, avoid_repeated=False, excluded_types=()):
+def run_image(source, destination, limit=20, region=None, *, avoid_repeated=False, excluded_types=(), fallback_priority='stage'):
     destination.mkdir(parents=True,exist_ok=True)
     result = {'input': str(source.resolve()), 'config_version': CONFIG_VERSION,
               'coordinate_system': '1-based [row,column]',
@@ -54,7 +54,7 @@ def run_image(source, destination, limit=20, region=None, *, avoid_repeated=Fals
         if filtered:
             result['filters'] = {'avoid_repeated':avoid_repeated, 'excluded_types':list(excluded_types)}
         solved = solve([(r,c) for r in range(10) for c in range(5)],edges,limit,
-                       node_types=labels, excluded_types=excluded_types, avoid_repeated=avoid_repeated)
+                       node_types=labels, excluded_types=excluded_types, avoid_repeated=avoid_repeated, fallback_priority=fallback_priority)
         result.update(export_solution(solved))
         result['board_origin'] = origin
         result['board_match'] = score
@@ -90,6 +90,7 @@ def main(argv=None):
     parser.add_argument('input',type=Path)
     parser.add_argument('--output-dir',type=Path,default=Path('outputs'))
     parser.add_argument('--max-paths',type=int,default=20)
+    parser.add_argument('--fallback-priority',choices=('stage','count','none'),default='stage',help='If goal is unreachable: prefer reached stage or icon count; none disables fallback.')
     parser.add_argument('--graph',action='store_true',help='Solve a hand-authored JSON graph with 1-based nodes/edges.')
     args=parser.parse_args(argv)
     if args.max_paths < 1:
@@ -99,7 +100,7 @@ def main(argv=None):
             data=json.loads(args.input.read_text(encoding='utf-8-sig'))
             nodes=[(r-1,c-1) for r,c in data['nodes']]
             edges=[(tuple(x-1 for x in e['from']),tuple(x-1 for x in e['to'])) for e in data['edges']]
-            result=export_solution(solve(nodes,edges,args.max_paths))
+            result=export_solution(solve(nodes,edges,args.max_paths,fallback_priority=None if args.fallback_priority=='none' else args.fallback_priority))
         except (OSError,ValueError,KeyError,TypeError) as exc:
             parser.error(str(exc))
         args.output_dir.mkdir(parents=True,exist_ok=True)
@@ -127,9 +128,9 @@ def main(argv=None):
             while target.with_name(target.name+f'.{suffix}').exists():
                 suffix+=1
             target=target.with_name(target.name+f'.{suffix}')
-        result=run_image(source,target,args.max_paths)
+        result=run_image(source,target,args.max_paths,fallback_priority=None if args.fallback_priority=='none' else args.fallback_priority)
         status=result['status']
-        details=result.get('max_count') if status=='ok' else [x['code'] for x in result.get('errors',[])]
+        details=result.get('max_count') if status in ('ok','partial') else [x['code'] for x in result.get('errors',[])]
         print(f'{source.name}: {status} {details}',flush=True)
         statuses.append(status)
     return 0 if all(s=='ok' for s in statuses) else 1

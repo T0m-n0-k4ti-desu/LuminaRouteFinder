@@ -19,7 +19,9 @@ from .__main__ import run_image
 from .recognize import RecognitionError, read_image
 from .render import render_route
 from .contents import CONTENT_NAMES
-from .session import SessionOutputs,load_cleanup_setting,save_cleanup_setting,default_settings_path,migrate_cleanup_setting,read_cleanup_setting
+from .session import SessionOutputs,load_cleanup_setting,save_cleanup_setting,default_settings_path,migrate_cleanup_setting,read_cleanup_setting,load_settings,save_settings as write_gui_settings
+
+FALLBACK_CHOICES={'到達段階を優先':'stage','通過アイコン数を優先':'count','途中経路を表示しない':'none'}
 
 ERROR_MESSAGES = {
     'AMBIGUOUS_CONTENT': 'コンテンツの種類を確定できません。画像の画質や遮蔽を確認するか、除外オプションをオフにしてください。',
@@ -37,7 +39,7 @@ ERROR_MESSAGES = {
 
 def describe_result(result, page=0):
     """Return a user-facing title, details and whether this is a success."""
-    if result['status'] == 'ok':
+    if result['status'] in ('ok','partial'):
         count = result['max_count']
         total = result['optimal_path_count']
         path = result['paths'][page]
@@ -48,6 +50,11 @@ def describe_result(result, page=0):
                               if kinds and kinds[r-1][c-1] in CONTENT_NAMES else '')
                              for i, (r,c) in enumerate(path,1))
         details = describe_filters(result) + details
+        if result['status']=='partial':
+            stage=result['reached_stage']
+            priority='到達段階を優先' if result.get('fallback_priority')=='stage' else '通過アイコン数を優先'
+            details=f'ゴール未到達 · 第{stage}段階まで\n{priority}で途中経路を表示しています。\n\n'+details
+            return f'ゴール未到達 · 第{stage}段階・{count}アイコン',details,True
         return f'解析完了 · 最大{count}アイコン', details, True
     if result['status'] == 'no_path':
         return 'ゴールに到達できません', describe_filters(result)+'現在の接続と探索条件では第1段階から第10段階への経路がありません。条件を緩めるか、接続確認画像 recognized.png を確認してください。', False
@@ -71,7 +78,7 @@ def describe_filters(result):
     return '\n'.join(lines)+'\n\n' if lines else ''
 
 
-def analyze_file(source, output_root, limit=20, region=None, on_created=None, *, avoid_repeated=False, excluded_types=()):
+def analyze_file(source, output_root, limit=20, region=None, on_created=None, *, avoid_repeated=False, excluded_types=(), fallback_priority='stage'):
     """Run analysis into a newly allocated folder; no earlier result is overwritten."""
     source, output_root = Path(source), Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
@@ -80,8 +87,8 @@ def analyze_file(source, output_root, limit=20, region=None, on_created=None, *,
     if on_created is not None:
         on_created(destination)
     result = run_image(source, destination, limit=limit, region=region,
-                       avoid_repeated=avoid_repeated, excluded_types=excluded_types)
-    name = 'error.png' if result['status'] == 'error' else ('board.png' if result['status'] == 'ok' else 'route.png')
+                       avoid_repeated=avoid_repeated, excluded_types=excluded_types, fallback_priority=fallback_priority)
+    name = 'error.png' if result['status'] == 'error' else ('board.png' if result['status'] in ('ok','partial') else 'route.png')
     preview = destination / name
     if not preview.is_file():
         preview = destination/'input.png' if (destination/'input.png').is_file() else source
@@ -101,6 +108,7 @@ class Application:
         self.settings_path=Path(settings_path).resolve() if settings_path is not None else default_settings_path()
         legacy=self.output_root/'gui-settings.json'
         self.settings_notice=None
+        initial_options=load_settings(self.settings_path if read_cleanup_setting(self.settings_path) is not None else legacy)
         initial_setting=read_cleanup_setting(self.settings_path)
         if initial_setting is None:
             initial_setting=load_cleanup_setting(legacy)
@@ -110,13 +118,15 @@ class Application:
         except OSError as exc:
             self.settings_notice='旧設定を移行できませんでした。保存先の権限を確認してください。\n'+str(exc)
         self.delete_outputs=tk.BooleanVar(master=root,value=initial_setting if self.settings_notice else load_cleanup_setting(self.settings_path))
+        self.saved_options=initial_options if self.settings_notice else load_settings(self.settings_path)
+        self.initial_path_limit=self.saved_options['initial_path_limit']
         self.worker_thread=None
         self.closing=False
         self.close_wait_id=None
         self.result = None
         self.board = None
         self.page = 0
-        self.page_limit = 20
+        self.page_limit = self.initial_path_limit
         self.requested_page = 0
         self.busy = False
         self.closed = False
@@ -161,8 +171,8 @@ class Application:
         self.drop_label.pack(fill='x',pady=(10,12))
         options = ttk.LabelFrame(main, text='探索オプション（チェック時のみ有効）', padding=8)
         options.pack(fill='x', pady=(0,10))
-        self.avoid_repeated = tk.BooleanVar(value=False)
-        self.exclude_enabled = tk.BooleanVar(value=False)
+        self.avoid_repeated = tk.BooleanVar(master=root,value=self.saved_options['avoid_repeated'])
+        self.exclude_enabled = tk.BooleanVar(master=root,value=self.saved_options['exclude_enabled'])
         self.repeat_check = ttk.Checkbutton(options,text='同じコンテンツの連続を禁止',variable=self.avoid_repeated,
                                             command=self.options_changed)
         self.repeat_check.grid(row=0,column=0,sticky='w',padx=(0,20))
@@ -172,12 +182,20 @@ class Application:
         self.content_list = tk.Listbox(options,selectmode='multiple',exportselection=False,height=4,width=32)
         for name in CONTENT_NAMES.values():
             self.content_list.insert('end',name)
+        for i,key in enumerate(CONTENT_NAMES):
+            if key in self.saved_options['excluded_types']:self.content_list.selection_set(i)
         self.content_list.grid(row=1,column=1,sticky='ew',pady=(5,0))
         scroll = ttk.Scrollbar(options,orient='vertical',command=self.content_list.yview)
         scroll.grid(row=1,column=2,sticky='ns',pady=(5,0))
-        self.content_list.configure(yscrollcommand=scroll.set,state='disabled')
+        self.content_list.configure(yscrollcommand=scroll.set,state='normal' if self.exclude_enabled.get() else 'disabled')
         ttk.Label(options,text='除外する種類をクリックして選択・解除できます（複数可）。',wraplength=330).grid(row=1,column=0,sticky='w',padx=(0,20))
         self.content_list.bind('<<ListboxSelect>>',self.options_changed)
+        ttk.Label(options,text='ゴール未到達時').grid(row=2,column=0,sticky='w',pady=(8,0))
+        initial_choice=next(label for label,key in FALLBACK_CHOICES.items() if key==self.saved_options['fallback_priority'])
+        self.fallback_priority=tk.StringVar(master=root,value=initial_choice)
+        self.fallback_combo=ttk.Combobox(options,textvariable=self.fallback_priority,values=list(FALLBACK_CHOICES),state='readonly',width=30)
+        self.fallback_combo.grid(row=2,column=1,sticky='ew',pady=(8,0))
+        self.fallback_combo.bind('<<ComboboxSelected>>',self.options_changed)
         self.progress = ttk.Progressbar(main,mode='indeterminate')
         body = ttk.Frame(main)
         self.body = body
@@ -360,8 +378,9 @@ class Application:
             self.show_input()
             self.status.configure(text='探索条件を変更しました。「解析」を押してください。',foreground='#26374a')
             self.set_details('現在の条件で探索するには「解析」を押してください。')
+        self.save_settings()
 
-    def start(self, limit=20, selected_page=0):
+    def start(self, limit=None, selected_page=0):
         if self.busy or self.closing:
             return
         value = self.path.get().strip()
@@ -376,6 +395,9 @@ class Application:
         if self.exclude_enabled.get() and not excluded_types:
             self.show_error('除外するコンテンツを1つ以上選択するか、「指定コンテンツを除外」のチェックを外してください。')
             return
+        if limit is None:limit=self.initial_path_limit
+        priority=FALLBACK_CHOICES[self.fallback_priority.get()]
+        fallback_priority=None if priority=='none' else priority
         region=self.region
         self.clear_result()
         self.selecting.set(False)
@@ -390,6 +412,7 @@ class Application:
         self.analyze_button.configure(state='disabled')
         self.select_button.configure(state='disabled')
         self.reset_region_button.configure(state='disabled')
+        self.fallback_combo.configure(state='disabled')
         self.repeat_check.configure(state='disabled')
         self.exclude_check.configure(state='disabled')
         self.content_list.configure(state='disabled')
@@ -397,14 +420,14 @@ class Application:
         self.set_details('盤面と接続を確認しています。')
         self.progress.pack(fill='x',pady=(0,10),before=self.body)
         self.progress.start(12)
-        self.worker_thread=threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types),daemon=True)
+        self.worker_thread=threading.Thread(target=self.worker,args=(source.resolve(),limit,region,avoid_repeated,excluded_types,fallback_priority),daemon=True)
         self.worker_thread.start()
 
-    def worker(self,source,limit,region,avoid_repeated=False,excluded_types=()):
+    def worker(self,source,limit,region,avoid_repeated=False,excluded_types=(),fallback_priority='stage'):
         try:
             self.messages.put(('done',analyze_file(source,self.output_root,limit,region,
                                                            on_created=self.session_outputs.add_directory,
-                                                           avoid_repeated=avoid_repeated,excluded_types=excluded_types)))
+                                                           avoid_repeated=avoid_repeated,excluded_types=excluded_types,fallback_priority=fallback_priority)))
         except Exception as exc:
             self.messages.put(('failed',str(exc)))
 
@@ -424,6 +447,7 @@ class Application:
             self.progress.pack_forget()
             for widget in (self.entry,self.browse_button,self.paste_button,self.analyze_button,self.select_button,self.reset_region_button):
                 widget.configure(state='normal')
+            self.fallback_combo.configure(state='readonly')
             self.repeat_check.configure(state='normal')
             self.exclude_check.configure(state='normal')
             self.content_list.configure(state='normal' if self.exclude_enabled.get() else 'disabled')
@@ -435,7 +459,7 @@ class Application:
                 self.result_image = self.image
                 self.showing_input = False
                 title,details,success = describe_result(result)
-                self.status.configure(text=title,foreground='#147447' if success else '#b42318')
+                self.status.configure(text=title,foreground='#9a6700' if result['status']=='partial' else ('#147447' if success else '#b42318'))
                 self.set_details(details)
                 self.output_label.configure(text=f'保存先:\n{self.destination.resolve()}')
                 self.open_button.configure(state='normal')
@@ -447,7 +471,7 @@ class Application:
         self.poll_id = self.root.after(80,self.poll)
 
     def show_page(self, page):
-        if self.result is None or self.result['status'] != 'ok':
+        if self.result is None or self.result['status'] not in ('ok','partial'):
             return
         self.page = page
         paths = self.result['paths']
@@ -464,7 +488,7 @@ class Application:
         self.render()
 
     def change_page(self, delta):
-        if self.busy or self.result is None or self.result['status'] != 'ok':
+        if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):
             return
         page = self.page + delta
         if 0 <= page < len(self.result['paths']):
@@ -490,7 +514,7 @@ class Application:
         self.canvas.configure(cursor='')
         self.showing_input=False
         self.zoom=None
-        if self.result['status']=='ok':
+        if self.result['status'] in ('ok','partial'):
             self.show_page(self.page)
         else:
             self.image=self.result_image
@@ -662,7 +686,13 @@ class Application:
 
     def save_settings(self):
         try:
-            save_cleanup_setting(self.settings_path,self.delete_outputs.get())
+            write_gui_settings(self.settings_path,{
+                'delete_outputs_on_exit':self.delete_outputs.get(),
+                'avoid_repeated':self.avoid_repeated.get(),
+                'exclude_enabled':self.exclude_enabled.get(),
+                'excluded_types':[key for i,key in enumerate(CONTENT_NAMES) if i in self.content_list.curselection()],
+                'fallback_priority':FALLBACK_CHOICES[self.fallback_priority.get()],
+                'initial_path_limit':self.initial_path_limit})
         except OSError as exc:
             self.set_details('設定を保存できませんでした。今回の選択は有効ですが、次回起動時には引き継がれません。\n'+str(exc))
 
@@ -678,7 +708,7 @@ class Application:
         self.poll_id=self.resize_id=None
         for widget in (self.entry,self.browse_button,self.paste_button,self.analyze_button,
                        self.select_button,self.reset_region_button,self.cleanup_check,
-                       self.repeat_check,self.exclude_check,self.content_list):
+                       self.repeat_check,self.exclude_check,self.content_list,self.fallback_combo):
             widget.configure(state='disabled')
         self.status.configure(text='解析の完了を待って終了します…' if self.worker_thread and self.worker_thread.is_alive() else '終了処理中…')
         self.finish_close()
