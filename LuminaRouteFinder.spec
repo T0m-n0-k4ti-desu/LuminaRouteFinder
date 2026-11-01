@@ -7,7 +7,7 @@ a = Analysis(
     [str(root / 'tools' / 'exe_entry.py')],
     pathex=[str(root)],
     binaries=[],
-    datas=collect_data_files('lumina_route_finder', includes=['assets/*.png']),
+    datas=collect_data_files('lumina_route_finder', includes=['assets/*.png', 'assets/content_icons/*.png']),
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],

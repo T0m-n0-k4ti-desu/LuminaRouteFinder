@@ -20,6 +20,18 @@ class ResultDescriptionTests(unittest.TestCase):
         self.assertIn('カーソル',details)
         self.assertIn('CURSOR_OCCLUSION',details)
 
+    def test_path_names_and_unknown_are_displayed_without_filters(self):
+        result={'status':'ok','max_count':2,'optimal_path_count':2,
+                'paths':[[[1,1],[2,1]],[[1,2],[2,1]]],
+                'content_types':[['escape_room','element_tiles'],[None,None]]}
+        _,details,success=describe_result(result)
+        self.assertTrue(success)
+        self.assertIn('1. 第1段階・1列目（エスケープルーム）',details)
+        self.assertIn('2. 第2段階・1列目',details)
+        self.assertNotIn('第2段階・1列目（',details)
+        self.assertNotIn('判別不能',details)
+        self.assertIn('第1段階・2列目（属性タイル渡り）',describe_result(result,1)[1])
+
     def test_no_path_is_not_success(self):
         self.assertFalse(describe_result({'status':'no_path'})[2])
 
@@ -162,6 +174,15 @@ class GuiTests(unittest.TestCase):
             self.app.paste_image()
         self.assertIn('クリップボードに画像がありません',self.app.details.get('1.0','end'))
 
+    def test_missing_clipboard_backend_shows_install_help(self):
+        from unittest.mock import patch
+        self.app.path.set('unchanged.jpg')
+        with patch('lumina_route_finder.clipboard.get_clipboard_image',
+                   side_effect=NotImplementedError('wl-paste or xclip is required')):
+            self.assertEqual(self.app.paste_image(), 'break')
+        self.assertEqual(self.app.path.get(), 'unchanged.jpg')
+        self.assertIn('sudo apt install wl-clipboard xclip', self.app.details.get('1.0','end'))
+
     def test_text_paste_does_not_replace_selected_image(self):
         from unittest.mock import patch
         self.app.path.set('unchanged.jpg')
@@ -212,6 +233,56 @@ class GuiTests(unittest.TestCase):
         self.assertIsNone(self.app.result)
         self.assertTrue(self.app.showing_input)
 
+    def test_drag_pans_zoomed_input_and_result_without_changing_region(self):
+        import numpy as np
+        self.app.input_image=np.zeros((500,1000,3),dtype=np.uint8)
+        for showing_input in (True,False):
+            with self.subTest(showing_input=showing_input):
+                self.app.showing_input=showing_input
+                self.app.image=self.app.input_image
+                self.app.zoom=2
+                self.app.region=(50,60,300,400)
+                self.app.render()
+                self.app.canvas.xview_moveto(0)
+                self.app.canvas.yview_moveto(0)
+                before=(self.app.canvas.xview()[0],self.app.canvas.yview()[0])
+                self.app.pointer_start(SimpleNamespace(x=100,y=100))
+                self.assertTrue(self.app.panning)
+                self.app.pointer_drag(SimpleNamespace(x=40,y=30))
+                self.app.pointer_end(SimpleNamespace(x=40,y=30))
+                self.assertGreater(self.app.canvas.xview()[0],before[0])
+                self.assertGreater(self.app.canvas.yview()[0],before[1])
+                self.assertEqual(self.app.region,(50,60,300,400))
+                self.assertFalse(self.app.panning)
+                self.assertEqual(self.app.canvas.cget('cursor'),'hand2')
+                self.app.fit()
+                self.assertFalse(self.app.panning)
+                self.assertEqual(self.app.canvas.xview()[0],0)
+                self.assertEqual(self.app.canvas.yview()[0],0)
+
+    def test_region_mode_uses_drag_for_selection_and_busy_blocks_panning(self):
+        import numpy as np
+        self.app.input_image=np.zeros((500,1000,3),dtype=np.uint8)
+        self.app.show_input()
+        self.app.selecting.set(True)
+        self.app.zoom=2
+        self.app.render()
+        before=(self.app.canvas.xview(),self.app.canvas.yview())
+        self.app.pointer_start(SimpleNamespace(x=20,y=20))
+        self.assertFalse(self.app.panning)
+        self.assertIsNotNone(self.app.drag_start)
+        self.app.pointer_drag(SimpleNamespace(x=180,y=180))
+        self.assertEqual((self.app.canvas.xview(),self.app.canvas.yview()),before)
+        self.app.pointer_end(SimpleNamespace(x=180,y=180))
+        self.assertIsNotNone(self.app.region)
+        self.app.selecting.set(False)
+        self.app.zoom=2
+        self.app.render()
+        self.app.busy=True
+        self.app.pointer_start(SimpleNamespace(x=100,y=100))
+        self.assertFalse(self.app.panning)
+        self.app.busy=False
+
     def test_selection_coordinates_account_for_zoom_offsets_and_scroll(self):
         from unittest.mock import patch
         import numpy as np
@@ -222,6 +293,50 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(self.app.input_point(SimpleNamespace(x=1,y=1)),(400,200))
         with patch.object(self.app.canvas,'canvasx',return_value=-100),patch.object(self.app.canvas,'canvasy',return_value=2000):
             self.assertEqual(self.app.input_point(SimpleNamespace(x=1,y=1)),(0,500))
+
+    def test_filter_options_default_off_and_combined_analysis(self):
+        from lumina_route_finder.contents import CONTENT_NAMES
+        sample=Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'
+        self.assertFalse(self.app.avoid_repeated.get())
+        self.assertFalse(self.app.exclude_enabled.get())
+        self.assertEqual(self.app.content_list.cget('state'),'disabled')
+        self.app.path.set(str(sample))
+        self.app.avoid_repeated.set(True)
+        self.app.exclude_enabled.set(True)
+        self.app.options_changed()
+        self.app.content_list.selection_set(list(CONTENT_NAMES).index('boss_mutation'))
+        self.app.start(limit=1)
+        self.assertIn('disabled',self.app.repeat_check.state())
+        self.wait_for_analysis()
+        self.assertEqual(self.app.result['status'],'ok')
+        self.assertEqual(self.app.result['filters'],{'avoid_repeated':True,'excluded_types':['boss_mutation']})
+        self.assertIn(self.app.destination,self.app.session_outputs.directories)
+        self.assertIn('同じコンテンツの連続を禁止',self.app.details.get('1.0','end'))
+        self.assertIn('ボス変異戦闘',self.app.details.get('1.0','end'))
+        if self.app.result['paths_truncated']:
+            self.app.change_page(1)
+            self.wait_for_analysis()
+            self.assertEqual(self.app.page,1)
+            self.assertTrue(self.app.result['filters']['avoid_repeated'])
+            self.assertEqual(self.app.result['filters']['excluded_types'],['boss_mutation'])
+        self.app.exclude_enabled.set(False)
+        self.app.options_changed()
+        self.assertIsNone(self.app.result)
+        self.assertEqual(self.app.content_list.cget('state'),'disabled')
+        self.app.avoid_repeated.set(False)
+        self.app.options_changed()
+        self.app.start()
+        self.wait_for_analysis()
+        self.assertEqual(self.app.result['status'],'ok')
+        self.assertNotIn('filters',self.app.result)
+
+    def test_empty_exclusion_selection_requires_target(self):
+        self.app.path.set(str(Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'))
+        self.app.exclude_enabled.set(True)
+        self.app.options_changed()
+        self.app.start()
+        self.assertFalse(self.app.busy)
+        self.assertIn('1つ以上',self.app.details.get('1.0','end'))
 
     def test_cleanup_checkbox_default_and_disable_persists(self):
         from lumina_route_finder.session import load_cleanup_setting
@@ -241,7 +356,8 @@ class GuiTests(unittest.TestCase):
         from unittest.mock import patch
         with patch('lumina_route_finder.gui.analyze_file') as analyze:
             entered=threading.Event();release=threading.Event()
-            def delayed(source,root,limit,region,on_created):
+            def delayed(source,root,limit,region,on_created,**options):
+                self.assertEqual(options,{'avoid_repeated':True,'excluded_types':('boss_mutation',)})
                 destination=Path(root)/'unpolled'
                 destination.mkdir(parents=True)
                 on_created(destination)
@@ -250,12 +366,19 @@ class GuiTests(unittest.TestCase):
                 (destination/'route.png').write_bytes(b'result')
                 return {'status':'no_path'},destination,None
             analyze.side_effect=delayed
-            self.app.worker_thread=threading.Thread(target=self.app.worker,args=(Path('source.jpg'),20,None))
-            self.app.worker_thread.start()
+            from lumina_route_finder.contents import CONTENT_NAMES
+            self.app.path.set(str(Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'))
+            self.app.avoid_repeated.set(True)
+            self.app.exclude_enabled.set(True)
+            self.app.options_changed()
+            self.app.content_list.selection_set(list(CONTENT_NAMES).index('boss_mutation'))
+            self.app.start()
             self.assertTrue(entered.wait(2))
             self.app.close()
             self.assertFalse(self.app.closed)
             self.assertTrue(self.app.closing)
+            self.assertIn('disabled',self.app.repeat_check.state())
+            self.assertIn('disabled',self.app.exclude_check.state())
             release.set()
             deadline=time.monotonic()+5
             while not self.app.closed and time.monotonic()<deadline:

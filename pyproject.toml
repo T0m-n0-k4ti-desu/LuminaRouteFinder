@@ -19,4 +19,4 @@ lumina-route-finder-gui = "lumina_route_finder.gui:main"
 include = ["lumina_route_finder*"]
 
 [tool.setuptools.package-data]
-lumina_route_finder = ["assets/*.png"]
+lumina_route_finder = ["assets/*.png", "assets/content_icons/*.png"]
