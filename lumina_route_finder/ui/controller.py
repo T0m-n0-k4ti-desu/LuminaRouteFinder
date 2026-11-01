@@ -9,16 +9,15 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinterdnd2 import COPY, TkinterDnD
-from ..analysis import analyze_file
-from ..analysis_session import AnalysisCache, AnalysisCancelled
-from ..errors import ErrorCode, RecognitionError, failure_issues
-from ..error_messages import error_message, format_issues
-from ..image_io import read_image
-from ..render import render_route
+from ..application.analysis import analyze_file
+from ..application.session import AnalysisCache, AnalysisCancelled
+from ..shared.errors import ErrorCode, RecognitionError, failure_issues
+from ..shared.messages import error_message, format_issues
+from ..storage.images import read_image
+from ..rendering.routes import render_route
 from ..domain.catalog import CONTENT_NAMES
-from ..session import SessionOutputs
-from ..settings import (load_cleanup_setting, default_settings_path, migrate_cleanup_setting,
-                        read_cleanup_setting, load_settings, save_settings as write_gui_settings)
+from ..storage.session_outputs import SessionOutputs
+from ..storage.settings import load_cleanup_setting, default_settings_path, migrate_cleanup_setting, read_cleanup_setting, load_settings, save_settings as write_gui_settings
 from .options import FALLBACK_CHOICES
 from .presentation import describe_result
 from .view import ApplicationView
@@ -131,7 +130,7 @@ class Application:
         if self.busy or self.closing:
             return 'break'
         try:
-            from ..clipboard import get_clipboard_image
+            from ..desktop.clipboard import get_clipboard_image
             image=get_clipboard_image()
             if image is None:
                 if event is None:
@@ -147,7 +146,7 @@ class Application:
             return 'break'
 
     def load_pasted_image(self,image):
-        from ..clipboard import save_clipboard_image
+        from ..desktop.clipboard import save_clipboard_image
         path=save_clipboard_image(image,self.output_root)
         self.session_outputs.add_file(path)
         self.view.path.set(str(path))
@@ -316,7 +315,7 @@ class Application:
         self.render()
 
     def candidate_image(self):
-        from ..route_export import candidate_image
+        from ..desktop.route_export import candidate_image
         return candidate_image(self.board,self.result,self.page,self.selected_step)
 
     def save_candidate(self):
@@ -324,14 +323,14 @@ class Application:
         path=filedialog.asksaveasfilename(parent=self.root,title='表示中の候補を保存',defaultextension='.png',filetypes=[('PNG','*.png')],initialfile=f'route_{self.page+1}.png')
         if not path:return
         try:
-            from ..route_export import save_candidate
+            from ..desktop.route_export import save_candidate
             save_candidate(path,self.board,self.result,self.page,self.output_root,self.selected_step)
         except (OSError,ValueError) as exc:messagebox.showerror('保存できませんでした',str(exc),parent=self.root)
 
     def copy_candidate(self):
         if self.busy or self.result is None or self.result['status'] not in ('ok','partial'):return
         try:
-            from ..route_export import copy_image
+            from ..desktop.route_export import copy_image
             copy_image(self.candidate_image(),self.root.winfo_id())
         except (OSError,RuntimeError,ValueError) as exc:messagebox.showerror('コピーできませんでした',str(exc),parent=self.root)
 
@@ -449,13 +448,13 @@ class Application:
             self.set_details(error_message(ErrorCode.SETTINGS_SAVE_ERROR, str(exc)))
 
     def current_search(self):
-        from ..settings import normalize_search
+        from ..storage.settings import normalize_search
         return normalize_search({'avoid_repeated':self.view.avoid_repeated.get(),'exclude_enabled':self.view.exclude_enabled.get(),
             'excluded_types':[key for i,key in enumerate(CONTENT_NAMES) if i in self.view.content_list.curselection()],
             'fallback_priority':FALLBACK_CHOICES[self.view.fallback_priority.get()],'objective':self.objective,'weights':self.weights})
 
     def apply_search(self,values):
-        from ..settings import normalize_search
+        from ..storage.settings import normalize_search
         values=normalize_search(values)
         self.view.avoid_repeated.set(values['avoid_repeated']);self.view.exclude_enabled.set(values['exclude_enabled'])
         self.view.content_list.configure(state='normal');self.view.content_list.selection_clear(0,'end')

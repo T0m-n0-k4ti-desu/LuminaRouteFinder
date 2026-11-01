@@ -1,11 +1,11 @@
-﻿"""Persist and copy the selected route, independently of session cleanup."""
+"""Persist and copy the selected route, independently of session cleanup."""
 import io
 import sys
 from pathlib import Path
 import cv2
 from PIL import Image
-from .image_io import write_image
-from .render import render_route
+from ..storage.images import write_image
+from ..rendering.routes import render_route
 
 
 def candidate_image(board,result,page=0,selected=None):

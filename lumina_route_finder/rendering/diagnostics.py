@@ -1,6 +1,6 @@
-﻿"""Visualize reachable nodes, filtered edges and the deepest reachable stage."""
+"""Visualize reachable nodes, filtered edges and the deepest reachable stage."""
 import cv2
-from .domain.geometry import center
+from ..domain.geometry import center
 
 def render_diagnostics(board,diagnostics):
     image=cv2.resize(board,None,fx=2,fy=2,interpolation=cv2.INTER_NEAREST)

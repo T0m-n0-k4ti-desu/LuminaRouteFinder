@@ -1,4 +1,4 @@
-﻿"""Packaged GUI feature integration check, invoked only by --features-test."""
+"""Packaged GUI feature integration check, invoked only by --features-test."""
 import time
 from pathlib import Path
 
@@ -6,7 +6,7 @@ def check_features(app,report):
     from lumina_route_finder.ui.preferences import PreferencesDialog
     from lumina_route_finder.ui.recognition_inspector import RecognitionInspector
     from lumina_route_finder.ui.diagnostics_dialog import DiagnosticsDialog
-    from lumina_route_finder.route_export import save_candidate,dib_bytes
+    from lumina_route_finder.desktop.route_export import save_candidate,dib_bytes
     root=app.root
     dialog=PreferencesDialog(app);root.update_idletasks()
     assert len(dialog.weight_vars)==12

@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 from lumina_route_finder.domain.diagnostics import diagnose,compare_relaxations,relaxation_variants
 from lumina_route_finder.domain.jobs import AnalysisCancelled
-from lumina_route_finder.diagnostic_render import render_diagnostics
+from lumina_route_finder.rendering.diagnostics import render_diagnostics
 class DiagnosticTests(unittest.TestCase):
     def test_reachability_filtered_frontier_and_relaxation_do_not_mutate_options(self):
         nodes=[(0,0),(1,0),(2,0)];edges=[(nodes[0],nodes[1]),(nodes[1],nodes[2])];labels={nodes[0]:'a',nodes[1]:'b',nodes[2]:'a'}

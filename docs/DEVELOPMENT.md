@@ -81,7 +81,7 @@ GUIはexe横（Python版はリポジトリ直下）の `gui-settings.json` を�
 | `fallback_priority` | `"stage"` | 未到達時の優先順位。`stage`＝到達段階、`count`＝通過数、`none`＝途中経路を返さない |
 | `initial_path_limit` | `20` | 最初に取得する候補数（整数1～1000）。ページを進めると追加取得 |
 
-種類IDは `lumina_route_finder/contents.py` の `CONTENT_NAMES` を参照してください。不正な型・値はその項目の初期値へ戻し、未知の種類IDは除きます。未定義の追加キーは保存時にも保持します。旧出力先の設定を移行する場合は探索設定も引き継ぎ、有効な新設定があれば新設定を優先します。
+種類IDは `lumina_route_finder/domain/catalog.py` の `CONTENT_NAMES` を参照してください。不正な型・値はその項目の初期値へ戻し、未知の種類IDは除きます。未定義の追加キーは保存時にも保持します。旧出力先の設定を移行する場合は探索設定も引き継ぎ、有効な新設定があれば新設定を優先します。
 
 ソルバーの直接呼び出しは互換性のため `fallback_priority=None` が既定です。途中経路を求める場合は `stage` または `count` を渡してください。GUI・CLIは到達段階優先が既定です。
 
@@ -107,7 +107,7 @@ python -m unittest discover -s tests -v
 認識テンプレートの元画像群はGitに含めず、必要な切り出しPNGを同梱しています。再生成には元画像群が必要です。
 
 ```powershell
-python tools\build_templates.py ..
+python -m tools.assets.build_templates ..
 ```
 
 ## Windows配布物をビルドする
@@ -115,7 +115,7 @@ python tools\build_templates.py ..
 ```powershell
 python -m venv .venv-build
 .\.venv-build\Scripts\python.exe -m pip install -r requirements-build.txt
-.\.venv-build\Scripts\python.exe tools\build_exe.py
+.\.venv-build\Scripts\python.exe -m tools.build.build_exe
 ```
 
 固定したビルド依存を使い、`dist/` に次の3点を生成します。
@@ -142,7 +142,7 @@ git push origin v1.0.2
 ローカルの検証のみ行う場合:
 
 ```powershell
-python tools/publish_release.py v1.0.2 --dry-run
+python -m tools.release.publish v1.0.2 --dry-run
 ```
 
 手動公開ではGitHub CLIをインストールし、書き込み可能なアカウントで `gh auth login` を行い、タグをリモートへpushした後に `--dry-run` を外します。Actionsでは標準の `GITHUB_TOKEN` と `contents: write` 権限を使用します。

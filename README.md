@@ -135,4 +135,4 @@ Windows版はexeと同じ場所の `outputs/gui/` に、解析ごとのフォル
 
 Python 3.10以降でも実行でき、外部APIやOCR実行ファイルは使いません。
 
-[Pythonのセットアップ・CLI・テスト・ビルドとリリース手順](docs/DEVELOPMENT.md) · [設計書](DESIGN.md)
+[Pythonのセットアップ・CLI・テスト・ビルドとリリース手順](docs/DEVELOPMENT.md) · [コード構成と責務](docs/ARCHITECTURE.md) · [設計書](DESIGN.md)

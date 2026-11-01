@@ -5,7 +5,7 @@ import sys
 
 from lumina_route_finder.gui import main
 
-base = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[1]
+base = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[2]
 os.chdir(base)
 
 if '--smoke-test' in sys.argv:
@@ -37,7 +37,7 @@ if '--smoke-test' in sys.argv:
     if args.scaled_header_test:
         # Exercise the PR fallback in a separate diagnostic process, including
         # the GUI worker and packaged assets, even if this image has a good grid.
-        import lumina_route_finder.locate as locator
+        import lumina_route_finder.recognition.grid as locator
         locator.find_grids=lambda image: []
     app.start()
     exit_code=[1]
@@ -48,7 +48,7 @@ if '--smoke-test' in sys.argv:
             return
         if args.features_test and not feature_checked[0]:
             try:
-                from frozen_features import check_features
+                from tools.build.frozen_features import check_features
                 check_features(app,args.report)
                 feature_checked[0]=True
                 root.after(100,finish)

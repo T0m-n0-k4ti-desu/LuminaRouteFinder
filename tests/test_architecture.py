@@ -37,5 +37,28 @@ class ArchitectureTests(unittest.TestCase):
         self.assertIs(session.load_settings,settings.load_settings)
 
 
+    def test_review_data_operations_do_not_load_image_or_gui_libraries(self):
+        self.check_imports('from lumina_route_finder.application.review import RecognitionEditor',
+                          ['cv2','numpy','tkinter','lumina_route_finder.rendering'])
+
+    def test_public_facades_reference_canonical_modules(self):
+        import importlib
+        pairs = {'analysis':'application.analysis', 'recognize':'recognition.connections',
+                 'settings':'storage.settings', 'session':'storage.session_outputs',
+                 'image_io':'storage.images', 'errors':'shared.errors',
+                 'error_messages':'shared.messages', 'cli':'application.cli'}
+        for old, new in pairs.items():
+            with self.subTest(module=old):
+                self.assertIs(importlib.import_module('lumina_route_finder.'+old),
+                              importlib.import_module('lumina_route_finder.'+new))
+
+    def test_relocated_modules_keep_source_data_paths(self):
+        from lumina_route_finder.shared.paths import ASSETS
+        from lumina_route_finder.storage.settings import default_settings_path
+        self.assertEqual(ASSETS, ROOT/'lumina_route_finder'/'assets')
+        self.assertTrue(ASSETS.is_dir())
+        self.assertEqual(default_settings_path(), ROOT/'gui-settings.json')
+
+
 if __name__=='__main__':
     unittest.main()

@@ -1,6 +1,6 @@
 """Pure Japanese result formatting, independent of Tk and image matching."""
 from ..domain.catalog import CONTENT_NAMES
-from ..error_messages import ERROR_MESSAGES, format_issues
+from ..shared.messages import ERROR_MESSAGES, format_issues
 
 
 

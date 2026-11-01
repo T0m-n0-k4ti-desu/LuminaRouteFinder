@@ -3,9 +3,10 @@ import base64
 import tkinter as tk
 from tkinter import ttk,messagebox
 import cv2
-from ..recognition_review import RecognitionEditor,render_recognition
+from ..application.review import RecognitionEditor
+from ..rendering.recognition import render_recognition
 from ..domain.catalog import CONTENT_NAMES
-from ..recognize import candidates
+from ..domain.geometry import candidates
 
 class RecognitionInspector:
     def __init__(self,app):

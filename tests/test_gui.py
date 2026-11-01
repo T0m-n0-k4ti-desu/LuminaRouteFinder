@@ -174,24 +174,24 @@ class GuiTests(unittest.TestCase):
         from unittest.mock import patch
         from PIL import Image
         image=Image.new('RGB',(100,80),(20,40,60))
-        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=image):
+        with patch('lumina_route_finder.desktop.clipboard.get_clipboard_image',return_value=image):
             self.assertEqual(self.app.paste_image(),'break')
         saved=Path(self.app.view.path.get())
         self.assertTrue(saved.is_file())
         self.assertEqual(self.app.image.shape[:2],(80,100))
         first=saved
-        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=image):
+        with patch('lumina_route_finder.desktop.clipboard.get_clipboard_image',return_value=image):
             self.app.paste_image()
         self.assertNotEqual(first,Path(self.app.view.path.get()))
         self.assertTrue(first.is_file())
-        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=None):
+        with patch('lumina_route_finder.desktop.clipboard.get_clipboard_image',return_value=None):
             self.app.paste_image()
         self.assertIn('クリップボードに画像がありません',self.app.view.details.get('1.0','end'))
 
     def test_missing_clipboard_backend_shows_install_help(self):
         from unittest.mock import patch
         self.app.view.path.set('unchanged.jpg')
-        with patch('lumina_route_finder.clipboard.get_clipboard_image',
+        with patch('lumina_route_finder.desktop.clipboard.get_clipboard_image',
                    side_effect=NotImplementedError('wl-paste or xclip is required')):
             self.assertEqual(self.app.paste_image(), 'break')
         self.assertEqual(self.app.view.path.get(), 'unchanged.jpg')
@@ -200,7 +200,7 @@ class GuiTests(unittest.TestCase):
     def test_text_paste_does_not_replace_selected_image(self):
         from unittest.mock import patch
         self.app.view.path.set('unchanged.jpg')
-        with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=None):
+        with patch('lumina_route_finder.desktop.clipboard.get_clipboard_image',return_value=None):
             self.assertIsNone(self.app.paste_image(SimpleNamespace()))
         self.assertEqual(self.app.view.path.get(),'unchanged.jpg')
 
@@ -209,7 +209,7 @@ class GuiTests(unittest.TestCase):
         from unittest.mock import patch
         from PIL import Image
         with Image.open(ROOT/'sample_image/cp_image.jpg') as source:
-            with patch('lumina_route_finder.clipboard.get_clipboard_image',return_value=source):
+            with patch('lumina_route_finder.desktop.clipboard.get_clipboard_image',return_value=source):
                 self.app.paste_image()
         self.app.start()
         self.assertIn('disabled',self.app.view.paste_button.state())
@@ -309,7 +309,7 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(self.app.preview.input_point(SimpleNamespace(x=1,y=1)),(0,500))
 
     def test_filter_options_default_off_and_combined_analysis(self):
-        from lumina_route_finder.contents import CONTENT_NAMES
+        from lumina_route_finder.recognition.contents import CONTENT_NAMES
         sample=Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'
         self.assertFalse(self.app.view.avoid_repeated.get())
         self.assertFalse(self.app.view.exclude_enabled.get())
@@ -385,7 +385,7 @@ class GuiTests(unittest.TestCase):
                 (destination/'route.png').write_bytes(b'result')
                 return {'status':'no_path'},destination,None
             analyze.side_effect=delayed
-            from lumina_route_finder.contents import CONTENT_NAMES
+            from lumina_route_finder.recognition.contents import CONTENT_NAMES
             self.app.view.path.set(str(Path(__file__).resolve().parents[1]/'docs/images/sample_image.jpg'))
             self.app.view.avoid_repeated.set(True)
             self.app.view.exclude_enabled.set(True)

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 
-from .domain.jobs import AnalysisCancelled
+from ..domain.jobs import AnalysisCancelled
 
 
 def checkpoint(cancel=None,progress=None,stage=None):

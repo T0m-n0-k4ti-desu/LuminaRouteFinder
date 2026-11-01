@@ -1,28 +1,7 @@
-﻿"""Build and validate a standalone Windows GUI, then generate its checksum."""
-import hashlib
-from pathlib import Path
-import subprocess
+"""Compatibility command; implementation: tools.build.build_exe."""
 import sys
-from test_exe import test_executable,test_portable_zip
-from package_release import create_portable_zip
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from tools.build.build_exe import *
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def main():
-    if sys.platform != 'win32':
-        raise SystemExit('Build the Windows executable on Windows.')
-    subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm',
-                    str(ROOT/'LuminaRouteFinder.spec')], cwd=ROOT, check=True)
-    test_executable()
-    exe=ROOT/'dist/LuminaRouteFinder.exe'
-    archive=create_portable_zip(exe,ROOT/'config/gui-settings.json',ROOT/'dist/LuminaRouteFinder-Windows-x64.zip')
-    test_portable_zip(archive)
-    lines=[f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}' for file in (exe,archive)]
-    (ROOT/'dist/SHA256SUMS.txt').write_text('\n'.join(lines)+'\n',encoding='ascii')
-    print(f'ZIP: {archive}')
-    print(f'Built: {exe}')
-
-
-if __name__ == '__main__':
-    main()
+if __name__=='__main__':main()

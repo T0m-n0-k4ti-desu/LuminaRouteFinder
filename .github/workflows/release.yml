@@ -40,9 +40,9 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
       - name: Build EXE and portable ZIP and run executable checks
-        run: python tools/build_exe.py
+        run: python -m tools.build.build_exe
       - name: Publish verified EXE, ZIP and checksums
         env:
           GH_TOKEN: ${{ github.token }}
           PYTHONUTF8: '1'
-        run: python tools/publish_release.py "$env:RELEASE_TAG"
+        run: python -m tools.release.publish "$env:RELEASE_TAG"

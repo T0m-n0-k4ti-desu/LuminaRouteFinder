@@ -2,7 +2,7 @@ import tempfile,threading,unittest
 from pathlib import Path
 from unittest.mock import patch
 from lumina_route_finder.analysis import run_image
-from lumina_route_finder.analysis_session import AnalysisCache,AnalysisCancelled
+from lumina_route_finder.application.session import AnalysisCache,AnalysisCancelled
 from lumina_route_finder.domain.solver import solve
 ROOT=Path(__file__).resolve().parents[1]
 class SessionTests(unittest.TestCase):
