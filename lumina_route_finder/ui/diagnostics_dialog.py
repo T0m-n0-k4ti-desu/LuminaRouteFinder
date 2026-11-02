@@ -13,7 +13,7 @@ from ..rendering.diagnostics import render_diagnostics
 
 class DiagnosticsDialog:
     def __init__(self,app):
-        self.app=app;self.key=app.analysis_cache.key;self.revision=app.analysis_cache.revision;self.snapshot=deepcopy(app.analysis_cache.snapshot);self.options=app.current_search()
+        self.app=app;self.key=app.analysis_cache.key;self.revision=app.analysis_cache.revision;self.snapshot=deepcopy(app.analysis_cache.snapshot);self.options=deepcopy(app.current_search())
         self.closed=False;self.cancel=threading.Event();self.messages=queue.Queue();self.rows=[];self.poll_id=None
         self.window=tk.Toplevel(app.root);self.window.title('未到達の原因・条件緩和の比較');self.window.geometry('1100x850');self.window.transient(app.root)
         self.window.protocol('WM_DELETE_WINDOW',self.close)
@@ -77,10 +77,10 @@ class DiagnosticsDialog:
     def apply(self):
         if self.app.busy or self.app.closing or not self.table.selection():return
         try:
-            stale=self.app.analysis_cache.key!=self.key or self.app.analysis_cache.revision!=self.revision or self.app.analysis_cache.signature(self.app.view.path.get().strip().strip(chr(34)).strip(chr(39)),self.app.region)!=self.key
+            stale=self.app.current_search()!=self.options or self.app.analysis_cache.key!=self.key or self.app.analysis_cache.revision!=self.revision or self.app.analysis_cache.signature(self.app.view.path.get().strip().strip(chr(34)).strip(chr(39)),self.app.region)!=self.key
         except OSError:stale=True
         if stale:
-            messagebox.showerror('比較結果が古くなりました','画像や範囲を変更したため比較し直してください。',parent=self.window);return
+            messagebox.showerror('比較結果が古くなりました','画像・範囲・探索条件を変更したため比較し直してください。',parent=self.window);return
         row=self.rows[int(self.table.selection()[0])]
         if row['result']['status']=='error':
             messagebox.showerror('適用できません',row['result']['message'],parent=self.window);return

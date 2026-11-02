@@ -23,6 +23,25 @@ class DiagnosticTests(unittest.TestCase):
         with self.assertRaises(ValueError):diagnose(nodes,[],dict.fromkeys(nodes),{'avoid_repeated':True})
         d=diagnose(nodes,[],{n:'a' for n in nodes},{'exclude_enabled':True,'excluded_types':['a']})
         self.assertEqual(d['furthest_stage'],0);self.assertFalse(d['reachable_nodes'])
+    def test_changed_search_options_reject_stale_comparison(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from lumina_route_finder.ui.diagnostics_dialog import DiagnosticsDialog
+        options={'objective':'count','weights':{},'avoid_repeated':False,'exclude_enabled':False,'excluded_types':[],'fallback_priority':'stage'}
+        for change in ({'objective':'weight'},{'weights':{'escape_room':99}},{'avoid_repeated':True},
+                       {'exclude_enabled':True},{'excluded_types':['escape_room']},{'fallback_priority':'count'}):
+            with self.subTest(change=change):
+                dialog=DiagnosticsDialog.__new__(DiagnosticsDialog)
+                dialog.options=copy.deepcopy(options);dialog.key='image';dialog.revision=1
+                dialog.window=Mock();dialog.table=Mock();dialog.table.selection.return_value=('0',)
+                dialog.rows=[{'options':options,'result':{'status':'ok'}}]
+                dialog.close=Mock()
+                dialog.app=SimpleNamespace(busy=False,closing=False,current_search=Mock(return_value=dict(options,**change)),
+                    apply_search=Mock(),start=Mock(),analysis_cache=SimpleNamespace(key='image',revision=1))
+                with patch('lumina_route_finder.ui.diagnostics_dialog.messagebox.showerror') as error:
+                    dialog.apply();error.assert_called_once()
+                dialog.app.apply_search.assert_not_called();dialog.app.start.assert_not_called();dialog.close.assert_not_called()
+
     def test_dialog_completes_without_applying_and_can_apply_explicit_choice(self):
         import tkinter as tk
         from tkinterdnd2 import TkinterDnD

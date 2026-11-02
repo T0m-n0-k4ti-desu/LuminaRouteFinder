@@ -35,7 +35,7 @@ def load_settings(path):
     if isinstance(raw.get('excluded_types'),list):
         result['excluded_types']=[key for key in CONTENT_NAMES if key in raw['excluded_types']]
     if raw.get('objective') in ('count','weight','count_then_weight'):result['objective']=raw['objective']
-    result['weights']={k:v for k,v in raw.get('weights',{}).items() if k in CONTENT_NAMES and type(v) in (int,float) and math.isfinite(v) and abs(v)<=1000000} if isinstance(raw.get('weights'),dict) else {}
+    result['weights']={k:v for k,v in raw.get('weights',{}).items() if k in CONTENT_NAMES and type(v) in (int,float) and abs(v)<=1000000 and math.isfinite(v)} if isinstance(raw.get('weights'),dict) else {}
     result['presets']={}
     if isinstance(raw.get('presets'),dict):
         for name,values in raw['presets'].items():
@@ -112,5 +112,5 @@ def normalize_search(values):
     raw=values.get('excluded_types',[])
     result['excluded_types']=[k for k in CONTENT_NAMES if k in raw] if isinstance(raw,list) else []
     raw=values.get('weights',{})
-    result['weights']={k:v for k,v in raw.items() if k in CONTENT_NAMES and type(v) in (int,float) and math.isfinite(v) and abs(v)<=1000000} if isinstance(raw,dict) else {}
+    result['weights']={k:v for k,v in raw.items() if k in CONTENT_NAMES and type(v) in (int,float) and abs(v)<=1000000 and math.isfinite(v)} if isinstance(raw,dict) else {}
     return result
