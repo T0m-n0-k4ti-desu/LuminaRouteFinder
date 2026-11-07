@@ -38,7 +38,18 @@ class WeightTests(unittest.TestCase):
         result=solve(nodes,edges,node_types=labels,objective='weight',weights={'a':.1,'b':.2,'c':.3,'d':0})
         self.assertEqual(result['optimal_path_count'],2)
 
+    def test_settings_and_presets_ignore_invalid_weights(self):
+        import json,tempfile
+        from pathlib import Path
+        from lumina_route_finder.storage.settings import load_settings,normalize_search
+        for value in (10**400,-10**400,float('nan'),float('inf'),True,1000001):
+            with self.subTest(value=str(value)),tempfile.TemporaryDirectory() as temp:
+                values={'weights':{'escape_room':value,'wheel_of_fate':-2.5}}
+                path=Path(temp)/'settings.json';path.write_text(json.dumps(values))
+                self.assertEqual(load_settings(path)['weights'],{'wheel_of_fate':-2.5})
+                self.assertEqual(normalize_search(values)['weights'],{'wheel_of_fate':-2.5})
+
     def test_invalid_weights(self):
-        for value in (float('nan'),float('inf'),True,1000001):
+        for value in (float('nan'),float('inf'),True,1000001,10**400,-10**400):
             with self.assertRaises(ValueError):solve([(0,0)],[],node_types={(0,0):'a'},objective='weight',weights={'a':value})
 if __name__=='__main__':unittest.main()

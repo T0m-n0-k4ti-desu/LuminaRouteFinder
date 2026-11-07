@@ -14,7 +14,7 @@ def solve(nodes, edges, limit=20, *, node_types=None, excluded_types=(), avoid_r
     """
     if objective not in ('count','weight','count_then_weight'):raise ValueError('invalid objective')
     weights=dict(weights or {})
-    if any(type(v) not in (int,float) or not math.isfinite(v) or abs(v)>1000000 for v in weights.values()):raise ValueError('invalid weights')
+    if any(type(v) not in (int,float) or abs(v)>1000000 or not math.isfinite(v) for v in weights.values()):raise ValueError('invalid weights')
     if fallback_priority not in (None,'stage','count'):
         raise ValueError('fallback_priority must be stage, count or None')
     if limit < 1:

@@ -13,7 +13,7 @@ from ..rendering.diagnostics import render_diagnostics
 
 class DiagnosticsDialog:
     def __init__(self,app):
-        self.app=app;self.key=app.analysis_cache.key;self.revision=app.analysis_cache.revision;self.snapshot=deepcopy(app.analysis_cache.snapshot);self.options=app.current_search()
+        self.app=app;self.key=app.analysis_cache.key;self.revision=app.analysis_cache.revision;self.snapshot=deepcopy(app.analysis_cache.snapshot);self.options=deepcopy(app.current_search())
         self.closed=False;self.cancel=threading.Event();self.messages=queue.Queue();self.rows=[];self.poll_id=None
         self.window=tk.Toplevel(app.root);self.window.title('未到達の原因・条件緩和の比較');self.window.geometry('1100x850');self.window.transient(app.root)
         self.window.protocol('WM_DELETE_WINDOW',self.close)
@@ -28,7 +28,7 @@ class DiagnosticsDialog:
         if self.diagnostic['frontier_edges']:text+='\n到達範囲から先へ進む接続に、除外・連続禁止による制限があります。'
         else:
             if stage<goal:text+='\n接続データ上、これ以上先の段階へ進めません。'
-        ttk.Label(right,text=text,wraplength=480).pack(anchor='w',pady=8)
+        self.explanation=ttk.Label(right,text=text,wraplength=480);self.explanation.pack(anchor='w',pady=8)
         ttk.Label(right,text='条件を緩めた結果（自動適用しません）').pack(anchor='w')
         columns=('条件','結果','段階','通過数','重み')
         tableframe=ttk.Frame(right);tableframe.pack(fill='both',expand=True)
@@ -38,15 +38,54 @@ class DiagnosticsDialog:
         self.table.pack(side='left',fill='both',expand=True);scroll.pack(side='right',fill='y')
         self.status=ttk.Label(right,text='比較中…',wraplength=480);self.status.pack(anchor='w',pady=8)
         self.apply_button=ttk.Button(right,text='選択条件を適用して再探索',command=self.apply,state='disabled');self.apply_button.pack(anchor='w',pady=6)
-        ttk.Button(right,text='比較を中止',command=self.cancel.set).pack(anchor='w',pady=6)
+        ttk.Button(right,text='比較を中止',command=lambda:self.cancel.set()).pack(anchor='w',pady=6)
         self.draw();threading.Thread(target=self.worker,daemon=True).start();self.poll_id=self.window.after(50,self.poll)
-    def worker(self):
+    def restart_comparison(self):
+        self.cancel.set()
+        if self.poll_id is not None:
+            self.window.after_cancel(self.poll_id);self.poll_id=None
+        self.key=self.app.analysis_cache.key;self.revision=self.app.analysis_cache.revision
+        self.snapshot=deepcopy(self.app.analysis_cache.snapshot);self.options=deepcopy(self.app.current_search())
+        self.cancel=threading.Event();self.messages=queue.Queue();self.rows=[]
+        self.table.delete(*self.table.get_children());self.apply_button.configure(state='disabled')
+        self.status.configure(text='条件の変更を検出したため、現在の条件で再比較しています…')
         try:
-            result=compare_relaxations(self.snapshot.labels,self.snapshot.edges,self.snapshot.labels,self.options,self.cancel,
-                                       progress=lambda name:self.messages.put(('progress',name)))
-            self.messages.put(('done',result))
-        except AnalysisCancelled:self.messages.put(('cancelled',None))
-        except Exception as exc:self.messages.put(('error',str(exc)))
+            self.diagnostic=diagnose(self.snapshot.labels,self.snapshot.edges,self.snapshot.labels,self.options)
+        except ValueError as exc:
+            self.status.configure(text='比較できませんでした: '+str(exc));return
+        stage=self.diagnostic['furthest_stage']
+        self.explanation.configure(text='現在の条件でゴールへ到達できます。' if self.diagnostic['goal_reachable'] else
+                                   (f'到達可能な最深段は第{stage}段階です。' if stage else '起点がすべて除外されています。'))
+        self.draw()
+        threading.Thread(target=self.worker,daemon=True).start();self.poll_id=self.window.after(50,self.poll)
+    def refresh_image(self):
+        self.cancel.set();self.rows=[]
+        self.table.delete(*self.table.get_children());self.apply_button.configure(state='disabled')
+        if self.poll_id is not None:self.window.after_cancel(self.poll_id)
+        self.poll_id=None
+        self.status.configure(text='画像・範囲の変更を検出したため、最新画像を解析してから再比較します…')
+        self.app.start()
+        self.poll_id=self.window.after(50,self.wait_for_analysis)
+    def wait_for_analysis(self):
+        self.poll_id=None
+        if self.closed or self.app.closing:return
+        if self.app.busy:
+            self.poll_id=self.window.after(50,self.wait_for_analysis);return
+        cache=self.app.analysis_cache
+        try:
+            current=cache.signature(self.app.view.path.get().strip().strip(chr(34)).strip(chr(39)),self.app.region)
+        except OSError:current=None
+        if current is None or cache.key!=current or cache.snapshot is None or not cache.snapshot.confirmed:
+            self.status.configure(text='最新画像の解析・認識の確定ができなかったため、比較を中止しました。');return
+        self.restart_comparison()
+    def worker(self):
+        snapshot,options,cancel,messages=self.snapshot,self.options,self.cancel,self.messages
+        try:
+            result=compare_relaxations(snapshot.labels,snapshot.edges,snapshot.labels,options,cancel,
+                                       progress=lambda name:messages.put(('progress',name)))
+            messages.put(('done',result))
+        except AnalysisCancelled:messages.put(('cancelled',None))
+        except Exception as exc:messages.put(('error',str(exc)))
     def poll(self):
         if self.closed:return
         try:kind,payload=self.messages.get_nowait()
@@ -77,10 +116,12 @@ class DiagnosticsDialog:
     def apply(self):
         if self.app.busy or self.app.closing or not self.table.selection():return
         try:
-            stale=self.app.analysis_cache.key!=self.key or self.app.analysis_cache.revision!=self.revision or self.app.analysis_cache.signature(self.app.view.path.get().strip().strip(chr(34)).strip(chr(39)),self.app.region)!=self.key
+            stale=self.app.analysis_cache.key!=self.key or self.app.analysis_cache.signature(self.app.view.path.get().strip().strip(chr(34)).strip(chr(39)),self.app.region)!=self.key
         except OSError:stale=True
         if stale:
-            messagebox.showerror('比較結果が古くなりました','画像や範囲を変更したため比較し直してください。',parent=self.window);return
+            self.refresh_image();return
+        if self.app.current_search()!=self.options or self.app.analysis_cache.revision!=self.revision:
+            self.restart_comparison();return
         row=self.rows[int(self.table.selection()[0])]
         if row['result']['status']=='error':
             messagebox.showerror('適用できません',row['result']['message'],parent=self.window);return
