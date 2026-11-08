@@ -26,7 +26,7 @@ def describe_result(result, page=0):
             details=f'ゴール未到達 · 第{stage}段階まで\n{priority}で途中経路を表示しています。\n\n'+details
             return f'ゴール未到達 · 第{stage}段階・{count}アイコン',details,True
         if mode!='count':return f'解析完了 · {mode_text}・{count}アイコン',details,True
-        return f'解析完了 · 最大{count}アイコン', details, True
+        return f'解析完了 · 最大{count}経路', details, True
     if result['status'] == 'no_path':
         return 'ゴールに到達できません', describe_filters(result)+'現在の接続と探索条件では第1段階から第10段階への経路がありません。条件を緩めるか、接続確認画像 recognized.png を確認してください。', False
     return '解析できませんでした', format_issues(result.get('errors', []), include_code=True), False
