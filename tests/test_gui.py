@@ -24,7 +24,8 @@ class ResultDescriptionTests(unittest.TestCase):
         result={'status':'ok','max_count':2,'optimal_path_count':2,
                 'paths':[[[1,1],[2,1]],[[1,2],[2,1]]],
                 'content_types':[['escape_room','element_tiles'],[None,None]]}
-        _,details,success=describe_result(result)
+        title,details,success=describe_result(result)
+        self.assertEqual(title,'解析完了 · 最大2経路')
         self.assertTrue(success)
         self.assertIn('1. 第1段階・1列目（エスケープルーム）',details)
         self.assertIn('2. 第2段階・1列目',details)
@@ -105,7 +106,7 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.app.busy)
         self.assertIn('disabled',self.app.view.analyze_button.state())
         self.wait_for_analysis()
-        self.assertIn('16アイコン',self.app.view.status.cget('text'))
+        self.assertIn('最大16経路',self.app.view.status.cget('text'))
         self.assertIsNotNone(self.app.image)
         self.assertIsNotNone(self.app.preview.photo)
         first=self.app.destination
@@ -214,7 +215,7 @@ class GuiTests(unittest.TestCase):
         self.app.start()
         self.assertIn('disabled',self.app.view.paste_button.state())
         self.wait_for_analysis()
-        self.assertIn('11アイコン',self.app.view.status.cget('text'))
+        self.assertIn('最大11経路',self.app.view.status.cget('text'))
         self.assertNotIn('disabled',self.app.view.paste_button.state())
 
     def test_file_preview_reverse_drag_and_region_analysis(self):
